@@ -7,9 +7,9 @@ uvicorn[standard]==0.53.0
 pydantic==2.13.5
 pydantic-settings==2.15.0
 email-validator==2.3.0
-SQLAlchemy==2.0.53
+SQLAlchemy==2.0.54
 alembic==1.20.0
-psycopg[binary]==3.3.5
+psycopg[binary]==3.3.6
 PyJWT==2.14.0
 argon2-cffi==25.1.0
 redis==8.1.0
