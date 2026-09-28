@@ -63,7 +63,7 @@ x-api-environment: &api-environment
 services:
   db:
     <<: *hardening
-    image: postgres:16.15-alpine3.24@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    image: postgres:16.15-alpine3.24@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     # The postgres entrypoint starts as root to prepare its directories, then re-executes itself as
     # the `postgres` user. Capabilities added back for exactly that step:
     #   CHOWN, DAC_OVERRIDE, FOWNER - own and chmod PGDATA and /var/run/postgresql
