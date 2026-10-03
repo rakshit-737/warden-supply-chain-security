@@ -102,6 +102,10 @@ _BARE_KEY_RE = re.compile(r"[A-Za-z0-9_-]+")
 # (``https://<token>@private.example/simple``), which the generic credential pattern
 # (``user:password@``) does not cover.
 _URL_USERINFO_RE = re.compile(r"(?P<scheme>\b[A-Za-z][A-Za-z0-9+.\-]{0,20}://)(?P<userinfo>[^\s/@?#\[\]]{1,256})@")
+# Userinfo of a reference written without a scheme ("user:token@host/path"), which urlsplit reports
+# as a path rather than an authority. A direct requirement reference may be written that way, and the
+# credential in it is just as real as in a scheme'd URL.
+_BARE_USERINFO_RE = re.compile(r"^(?P<userinfo>[^\s/@?#\[\]]{1,256})@(?=[^\s/@?#])")
 # Byte-order marks, longest first (the UTF-32-LE BOM starts with the UTF-16-LE BOM).
 _BOMS: tuple[tuple[bytes, str], ...] = (
     (codecs.BOM_UTF32_LE, "utf-32"),
@@ -157,6 +161,13 @@ def scrub_url_userinfo(text: str) -> str:
     """Replace the userinfo of every URL in ``text`` with ``[REDACTED]`` (``git@`` is kept)."""
     return _URL_USERINFO_RE.sub(
         lambda m: f"{m.group('scheme')}{'git' if m.group('userinfo') == 'git' else '[REDACTED]'}@", text
+    )
+
+
+def scrub_bare_userinfo(text: str) -> str:
+    """Replace leading scheme-less userinfo (``user:token@host/path``) with ``[REDACTED]@``."""
+    return _BARE_USERINFO_RE.sub(
+        lambda m: f"{'git' if m.group('userinfo') == 'git' else '[REDACTED]'}@", text
     )
 
 
@@ -253,9 +264,11 @@ def redact_url(url: str) -> str:
     except ValueError:
         # e.g. scp-like "git+ssh://git@host:org/repo.git": keep the shape, drop credentials and query.
         head, sep, _query = raw.partition("?")
-        return sanitize_text(scrub_url_userinfo(head) + ("?[REDACTED]" if sep else ""), max_len=300)
+        scrubbed = scrub_bare_userinfo(scrub_url_userinfo(head))
+        return sanitize_text(scrubbed + ("?[REDACTED]" if sep else ""), max_len=300)
     if not parts.scheme or not parts.netloc:
-        return sanitize_text(scrub_url_userinfo(raw), max_len=300)
+        # No authority to parse (e.g. "user:token@host/path"), so the userinfo is stripped textually.
+        return sanitize_text(scrub_bare_userinfo(scrub_url_userinfo(raw)), max_len=300)
     userinfo = ""
     if parts.username is not None or parts.password is not None:
         userinfo = "git@" if parts.username == "git" and parts.password is None else "[REDACTED]@"

@@ -38,7 +38,7 @@ from app.sbom.parsers import (
     scan_toml_positions,
 )
 from app.sbom.parsers.pyproject import poetry_constraint_to_pep440
-from app.sbom.parsers.requirements import _break_args_options, _strip_comment
+from app.sbom.parsers.requirements import _break_args_options, _strip_comment, parse_requirements
 from app.sbom.resolver import resolve_transitive
 
 DATA = Path(__file__).parent / "data" / "sbom"
@@ -636,10 +636,29 @@ def test_manifest_type(path, expected):
         ("https://[::1]:8443/simple", "https://[::1]:8443/simple"),
         ("git+https://u:secret@host.example:org/repo.git", "git+https://[REDACTED]@host.example:org/repo.git"),
         ("./wheels", "./wheels"),
+        # Scheme-less references: urlsplit reports no authority, but the credential is still real
+        # (found by backend/fuzz/fuzz_requirements.py).
+        ("user:secret@host.example/pkg.whl", "[REDACTED]@host.example/pkg.whl"),
+        ("TOKEN123@host.example/simple", "[REDACTED]@host.example/simple"),
+        ("git@github.com:org/repo.git", "git@github.com:org/repo.git"),
+        # Not userinfo: an "@" inside a path, and an empty userinfo.
+        ("./local/dir/file@2x.whl", "./local/dir/file@2x.whl"),
+        ("@host.example/simple", "@host.example/simple"),
     ],
 )
 def test_redact_url(url, expected):
     assert redact_url(url) == expected
+
+
+def test_direct_url_requirement_without_a_scheme_is_credential_free():
+    """A PEP 508 direct reference may omit the scheme; its password must not reach the SBOM."""
+    result = parse_requirements(
+        "requirements.txt", {"requirements.txt": "pkg @ user:s3cret@example.com/x.whl\n"}
+    )
+
+    (dependency,) = result.dependencies
+    assert "s3cret" not in (dependency.url or "")
+    assert dependency.url == "[REDACTED]@example.com/x.whl"
 
 
 def test_toml_positions_cover_escapes_headers_inline_tables_and_array_tables():
