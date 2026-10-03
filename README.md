@@ -253,7 +253,7 @@ SOC Grafana dashboard.
 
 ```bash
 cd backend
-pip install -r requirements-dev.txt
+pip install --require-hashes -r requirements-dev.lock.txt
 python -m ml.train --n 4000      # trains the model artifact
 uvicorn app.main:app --reload    # http://localhost:8000/docs
 pytest -q                        # offline: any test that touches the network fails

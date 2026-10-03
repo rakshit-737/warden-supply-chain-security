@@ -7,8 +7,9 @@
 #   readability (when a digest is given, it alone selects the image). Digests were resolved from
 #   registry-1.docker.io on 2026-09-15 (see deploy/README.md for the command and how to bump them).
 #   python:3.12.14-slim-trixie was the same index as python:3.12-slim on that date.
-# * Python dependencies are version-pinned in requirements.txt but NOT hash-pinned (no
-#   --require-hashes), so this build does not detect a tampered artifact for a pinned version.
+# * Python dependencies are installed from requirements.lock.txt with --require-hashes: pip refuses
+#   any artifact whose sha256 is not listed, so a tampered artifact for a pinned version fails the
+#   build. Regenerate that lock with backend/scripts/lock_requirements.sh.
 #
 # Runtime hardening
 # * Multi-stage: compilers and build headers exist only in the builder stage.
@@ -35,8 +36,9 @@ RUN python -m venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
 
 WORKDIR /src
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# --require-hashes: pip refuses any artifact whose sha256 is not listed in the lock file.
+COPY requirements.lock.txt ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock.txt
 
 # Train and persist the model artifact at build time (seeded; same parameters as before).
 COPY app ./app

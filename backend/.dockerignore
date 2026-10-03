@@ -23,6 +23,7 @@ htmlcov/
 
 # Not shipped in the runtime image
 tests/
+fuzz/
 benchmark/results/
 
 # Local databases and generated data

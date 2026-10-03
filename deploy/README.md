@@ -174,7 +174,6 @@ curl -fsSI -H "Authorization: Bearer ${token}" \
 ## Known limitations
 
 - Images and stack not yet built or run (see Status).
-- `backend/requirements.txt` pins versions but not hashes.
 - Secrets reach the api and db containers as environment variables, so anyone with Docker API access can
   read them (`docker inspect`). `METRICS_TOKEN` exists twice (in `.env` and in the secret file), and the
   two must be kept equal by hand.

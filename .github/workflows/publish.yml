@@ -28,13 +28,13 @@
 # Job layout: verify, then build once, least privilege per job
 #   verify-release-commit  contents, actions: read  tagged commit is on main and ci.yml passed for it
 #   build                  contents: read           builds sdist + wheel once, generates the release SBOM
-#   check-metadata         no token scopes          `twine check --strict` on the exact files that will be published
+#   check-metadata         contents: read           `twine check --strict` on the exact files that will be published
 #   attest                 id-token, attestations   Sigstore-signed SLSA build provenance for dist/* and the SBOM
 #   release-assets         contents: write, id-token  attaches dist/*, the SBOM, SHA256SUMS and the provenance
 #                                                     bundle to the GitHub release, each Sigstore-signed
 #   publish                id-token (env: pypi)     uploads the already-built dist/* via Trusted Publishing (OIDC)
-# Only `attest` and `publish` can mint an OIDC token, and neither of them builds anything or
-# installs packages from PyPI.
+# Only `attest`, `release-assets` and `publish` can mint an OIDC token (Sigstore signing and Trusted
+# Publishing), and none of them builds anything; `release-assets` installs nothing at all.
 #
 # Hardening notes:
 #   - Actions are pinned to full commit SHAs (resolved via the GitHub REST API; see ci.yml header).
@@ -259,8 +259,17 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    permissions: {}
+    permissions:
+      contents: read # the lock file for twine is read from the tagged commit
     steps:
+      # Before the artifacts are downloaded: checkout cleans the workspace of untracked files.
+      - name: Check out tagged commit (lock file only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: backend/requirements-publish.lock.txt
+          sparse-checkout-cone-mode: false
+
       - name: Set up Python 3.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -273,11 +282,9 @@ jobs:
           path: dist
 
       - name: twine check
-        # twine is version-pinned but its transitive dependencies are not hash-locked. This is contained:
-        # the job has no token scopes and the artifacts were already uploaded by the build job, so
-        # nothing installed here can alter what gets attested or published.
         run: |
-          python -m pip install --disable-pip-version-check "twine==7.0.0"
+          python -m pip install --disable-pip-version-check --require-hashes \
+            -r backend/requirements-publish.lock.txt
           python -m twine check --strict dist/*
 
   attest:

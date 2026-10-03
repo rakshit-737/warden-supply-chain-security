@@ -22,7 +22,7 @@ help:
 	@echo "  make down           docker compose down -v"
 
 install:
-	cd backend && pip install -r requirements-dev.txt
+	cd backend && pip install --require-hashes -r requirements-dev.lock.txt
 
 train:
 	cd backend && python -m ml.train

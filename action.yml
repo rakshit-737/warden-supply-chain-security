@@ -71,8 +71,9 @@ runs:
         WARDEN_HOME: ${{ github.action_path }}
       run: |
         python -m venv "${RUNNER_TEMP}/warden-venv"
+        # --require-hashes: every dependency must match a sha256 recorded in the lock file.
         "${RUNNER_TEMP}/warden-venv/bin/python" -m pip install --quiet --disable-pip-version-check \
-          -r "${WARDEN_HOME}/backend/requirements.txt"
+          --require-hashes -r "${WARDEN_HOME}/backend/requirements.lock.txt"
 
     - name: Scan project manifests
       id: scan

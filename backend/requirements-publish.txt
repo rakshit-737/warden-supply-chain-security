@@ -1,0 +1,2 @@
+# Publishing tooling (hash-locked in requirements-publish.lock.txt).
+twine==7.0.0

@@ -5,7 +5,7 @@
 ```bash
 git clone https://github.com/rakshit-737/warden-supply-chain-security
 cd warden-supply-chain-security
-cd backend && pip install -r requirements-dev.txt && cd ..
+cd backend && pip install --require-hashes -r requirements-dev.lock.txt && cd ..
 make train      # builds the ML model artifact
 make demo       # fills a local SQLite database with real results from the inert benchmark samples
 make run        # API on http://localhost:8000

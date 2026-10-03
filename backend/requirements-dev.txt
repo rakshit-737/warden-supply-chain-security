@@ -1,5 +1,6 @@
 -r requirements.txt
-# Development, testing, and security tooling.
+# Development, testing, and security tooling. Regenerate requirements-dev.lock.txt and
+# requirements-tools.lock.txt with backend/scripts/lock_requirements.sh after changing a pin.
 pytest==9.1.1
 pytest-cov==7.1.0
 ruff==0.16.7

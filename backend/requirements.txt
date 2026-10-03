@@ -1,4 +1,6 @@
-# Runtime dependencies (pinned for reproducible builds).
+# Runtime dependencies (pinned for reproducible builds). Edit a pin here, then regenerate the
+# hash-locked resolution with backend/scripts/lock_requirements.sh: every install (CI, Dockerfile,
+# action.yml) uses `pip install --require-hashes -r requirements.lock.txt`.
 # Security: pins are audited with pip-audit in CI; v1 pins of starlette (via fastapi),
 # PyJWT and python-multipart carried published advisories and were upgraded for Warden.
 fastapi==0.141.1
