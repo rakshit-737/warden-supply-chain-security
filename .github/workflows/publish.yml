@@ -30,6 +30,8 @@
 #   build                  contents: read           builds sdist + wheel once, generates the release SBOM
 #   check-metadata         no token scopes          `twine check --strict` on the exact files that will be published
 #   attest                 id-token, attestations   Sigstore-signed SLSA build provenance for dist/* and the SBOM
+#   release-assets         contents: write, id-token  attaches dist/*, the SBOM, SHA256SUMS and the provenance
+#                                                     bundle to the GitHub release, each Sigstore-signed
 #   publish                id-token (env: pypi)     uploads the already-built dist/* via Trusted Publishing (OIDC)
 # Only `attest` and `publish` can mint an OIDC token, and neither of them builds anything or
 # installs packages from PyPI.
@@ -300,11 +302,30 @@ jobs:
           path: sbom
 
       - name: Generate build provenance attestation
+        id: provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             dist/*
             sbom/*.cdx.json
+
+      # The attestation above is stored on the repository; this copy is attached to the GitHub release
+      # so the provenance travels with the artifacts for anyone who downloads them from there.
+      - name: Upload provenance bundle
+        env:
+          BUNDLE_PATH: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          mkdir -p provenance
+          cp "${BUNDLE_PATH}" provenance/provenance.intoto.jsonl
+
+      - name: Upload provenance artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-provenance
+          path: provenance/
+          if-no-files-found: error
+          retention-days: 90
 
   publish:
     name: Publish to PyPI
@@ -358,3 +379,86 @@ jobs:
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: dist/
+
+  release-assets:
+    name: Sign and attach release assets
+    needs: [build, check-metadata, attest]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # create/update the GitHub release and upload its assets
+      id-token: write # OIDC identity for Sigstore signing
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-distributions
+          path: dist
+
+      - name: Download release SBOM
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-sbom
+          path: sbom
+
+      - name: Download provenance bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-provenance
+          path: provenance
+
+      - name: Collect assets and write checksums
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p assets
+          cp dist/* assets/
+          cp sbom/*.cdx.json assets/
+          cp provenance/provenance.intoto.jsonl \
+            "assets/warden-supply-chain-security-${version}.intoto.jsonl"
+          # Checksums over every asset except the checksums file itself.
+          (cd assets && sha256sum -- * > "../SHA256SUMS") && mv SHA256SUMS assets/
+
+      - name: Sign assets with Sigstore
+        # Produces one <file>.sigstore.json bundle per input: the signature, the signing certificate
+        # (this workflow's OIDC identity) and the inclusion proof from the transparency log.
+        uses: sigstore/gh-action-sigstore-python@790bc6befb9d733738f18d8f895854b453640ec9 # v3.5.0
+        with:
+          inputs: |
+            ./assets/*.tar.gz
+            ./assets/*.whl
+            ./assets/*.cdx.json
+            ./assets/SHA256SUMS
+          upload-signing-artifacts: false
+          release-signing-artifacts: false
+
+      - name: Attach assets to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # The release is created on first upload if the tag has no release yet (a draft release keeps
+          # its draft state). --clobber replaces an asset of the same name on a re-run.
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release create "${TAG}" --verify-tag --title "${TAG}" --generate-notes
+          fi
+          gh release upload "${TAG}" assets/* --clobber
+
+      - name: Summary
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          {
+            echo "### Release assets"
+            echo "Attached to \`${TAG}\`, each signed with a Sigstore bundle (\`*.sigstore.json\`):"
+            echo
+            ls -1 assets
+            echo
+            echo "Verify a distribution:"
+            echo '```'
+            echo "python -m sigstore verify identity <file> \\"
+            echo "  --cert-identity https://github.com/${GITHUB_REPOSITORY}/.github/workflows/publish.yml@refs/tags/${TAG} \\"
+            echo "  --cert-oidc-issuer https://token.actions.githubusercontent.com"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"

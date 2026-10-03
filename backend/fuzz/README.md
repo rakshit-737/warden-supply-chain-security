@@ -19,7 +19,7 @@ the contract its target promises, not merely "does not crash":
 ```bash
 cd backend
 pip install -r requirements.txt
-pip install atheris==3.1.0                 # Linux/macOS wheel; see the pin in security.yml
+pip install atheris==3.1.0                 # manylinux x86_64 wheel; see the pin in security.yml
 PYTHONPATH=. python fuzz/fuzz_decode.py -max_total_time=60 fuzz/corpus/decode
 ```
 
@@ -27,7 +27,7 @@ Any libFuzzer flag works (`-runs=N`, `-max_len=N`, `-jobs=N`). A crash is writte
 directory as `crash-<sha1>`; replay it with
 `PYTHONPATH=. python fuzz/fuzz_decode.py crash-<sha1>`.
 
-Atheris publishes Linux and macOS wheels only; on Windows use WSL or the container.
+Atheris 3.x publishes manylinux x86_64 wheels only; on Windows or macOS use WSL, a Linux VM or the container.
 
 ## In CI
 
