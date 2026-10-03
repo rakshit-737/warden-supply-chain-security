@@ -1,0 +1,2 @@
+pkg @ //to[[[[ken@host/simple
+pkg2 @ https://tok[en@host/x.whl

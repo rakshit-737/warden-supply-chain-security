@@ -22,14 +22,14 @@ COPY . .
 RUN npm run build
 
 # ---- Stage 2: serve with unprivileged nginx --------------------------------------------------
-FROM nginxinc/nginx-unprivileged:1.30.5-alpine3.24@sha256:daa17b944bac2b578e962da4c61ad72a59233b3c63abea17113acaf4e6b9aea4 AS runtime
+FROM nginxinc/nginx-unprivileged:1.30.5-alpine3.24@sha256:ed04ec1ff34502c339ee5c3ae3f855442398edc1d05591e2b98981dcbbd20b1e AS runtime
 
 LABEL org.opencontainers.image.title="warden-web" \
       org.opencontainers.image.description="Warden security dashboard (static SPA and API reverse proxy)" \
       org.opencontainers.image.source="https://github.com/rakshit-737/warden-supply-chain-security" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.base.name="docker.io/nginxinc/nginx-unprivileged:1.30.5-alpine3.24" \
-      org.opencontainers.image.base.digest="sha256:daa17b944bac2b578e962da4c61ad72a59233b3c63abea17113acaf4e6b9aea4"
+      org.opencontainers.image.base.digest="sha256:ed04ec1ff34502c339ee5c3ae3f855442398edc1d05591e2b98981dcbbd20b1e"
 
 # Root only for the filesystem lock-down below; the final USER is the image's unprivileged nginx (101).
 USER root

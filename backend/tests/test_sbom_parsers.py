@@ -647,6 +647,10 @@ def test_manifest_type(path, expected):
         # Corrupt scheme separator: still an authority with a credential in it.
         ("https\x0e//u:p@host.example/x.whl", "https\\x0e//[REDACTED]@host.example/x.whl"),
         ("//token@host.example/simple", "//[REDACTED]@host.example/simple"),
+        # A token may contain brackets; only an IPv6 host (no "@" at all) keeps them.
+        ("//to[[ken@host.example/simple", "//[REDACTED]@host.example/simple"),
+        ("https://tok[en@host.example/simple", "https://[REDACTED]@host.example/simple"),
+        ("https://u@host.example@evil.example/x", "https://[REDACTED]@evil.example/x"),
     ],
 )
 def test_redact_url(url, expected):

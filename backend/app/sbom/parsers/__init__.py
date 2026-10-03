@@ -101,15 +101,21 @@ _BARE_KEY_RE = re.compile(r"[A-Za-z0-9_-]+")
 # Userinfo of any URL-looking substring. Tokens frequently travel as a bare username
 # (``https://<token>@private.example/simple``), which the generic credential pattern
 # (``user:password@``) does not cover.
-_URL_USERINFO_RE = re.compile(r"(?P<scheme>\b[A-Za-z][A-Za-z0-9+.\-]{0,20}://)(?P<userinfo>[^\s/@?#\[\]]{1,256})@")
+#
+# Per RFC 3986 the authority ends at "/", "?" or "#", and its userinfo ends at the LAST "@" in it.
+# The userinfo class therefore excludes only those delimiters and whitespace: a token may contain
+# anything else, brackets included, and the greedy match consumes up to that last "@". An IPv6 host
+# ("https://[::1]:8443/simple") has no "@" at all, so it never matches.
+_USERINFO = r"[^\s/?#]{1,256}"
+_URL_USERINFO_RE = re.compile(rf"(?P<scheme>\b[A-Za-z][A-Za-z0-9+.\-]{{0,20}}://)(?P<userinfo>{_USERINFO})@")
 # Userinfo of a reference written without a scheme ("user:token@host/path"), which urlsplit reports
 # as a path rather than an authority. A direct requirement reference may be written that way, and the
 # credential in it is just as real as in a scheme'd URL.
-_BARE_USERINFO_RE = re.compile(r"^(?P<userinfo>[^\s/@?#\[\]]{1,256})@(?=[^\s/@?#])")
+_BARE_USERINFO_RE = re.compile(rf"^(?P<userinfo>{_USERINFO})@(?=[^\s/@?#])")
 # Userinfo after a protocol-relative "//", i.e. an authority whose scheme is absent or malformed
 # ("https\x0e//user:token@host"). The scheme pattern above requires a well-formed "scheme://", and a
 # corrupted separator must not be a way to keep a credential in stored output.
-_NETLOC_USERINFO_RE = re.compile(r"//(?P<userinfo>[^\s/@?#\[\]]{1,256})@(?=[^\s/@?#])")
+_NETLOC_USERINFO_RE = re.compile(rf"//(?P<userinfo>{_USERINFO})@")
 # Byte-order marks, longest first (the UTF-32-LE BOM starts with the UTF-16-LE BOM).
 _BOMS: tuple[tuple[bytes, str], ...] = (
     (codecs.BOM_UTF32_LE, "utf-32"),
