@@ -4,15 +4,15 @@
 # Security: pins are audited with pip-audit in CI; v1 pins of starlette (via fastapi),
 # PyJWT and python-multipart carried published advisories and were upgraded for Warden.
 fastapi==0.141.1
-starlette==1.6.0
-uvicorn[standard]==0.53.0
+starlette==1.7.0
+uvicorn[standard]==0.54.0
 pydantic==2.13.5
 pydantic-settings==2.15.0
 email-validator==2.3.0
-SQLAlchemy==2.0.53
+SQLAlchemy==2.1.1
 alembic==1.20.0
-psycopg[binary]==3.3.5
-PyJWT==2.14.0
+psycopg[binary]==3.3.6
+PyJWT==2.15.0
 argon2-cffi==25.1.0
 redis==8.1.0
 httpx==0.28.1
