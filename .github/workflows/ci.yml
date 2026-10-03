@@ -430,6 +430,9 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          # Pinned: a different resolver version can produce a different (still valid) resolution,
+          # which would make this check fail for a reason unrelated to the pins.
+          version: "0.11.32"
           enable-cache: false
 
       - name: Regenerate the lock files
@@ -437,7 +440,7 @@ jobs:
 
       - name: Fail if a lock file is out of date
         run: |
-          if ! git diff --exit-code --stat -- 'backend/requirements*.lock.txt'; then
+          if ! git diff --exit-code -- 'backend/requirements*.lock.txt'; then
             echo "::error::A requirements lock file does not match its pins. Run backend/scripts/lock_requirements.sh and commit the result."
             exit 1
           fi
