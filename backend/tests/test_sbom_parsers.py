@@ -657,6 +657,9 @@ def test_manifest_type(path, expected):
         ("git+ssh://git+ssh://token@host.example/x", "git+ssh://git+ssh//[REDACTED]@host.example/x"),
         # Python's \\s also matches the separators \\x1c-\\x1f; they must not end an authority.
         ("token@\x1fhost.example/simple", "[REDACTED]@\\x1fhost.example/simple"),
+        # A control character is escaped for display, which can expose an authority that real
+        # whitespace had hidden: scrub again after sanitising.
+        ("http//:sus\x0cer:pw@host.example/repo.git", "http//[REDACTED]@host.example/repo.git"),
     ],
 )
 def test_redact_url(url, expected):

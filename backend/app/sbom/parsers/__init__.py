@@ -273,6 +273,18 @@ def load_manifest(path: str, content: object, warnings: list[str]) -> tuple[str 
     return text.lstrip("﻿"), digest, "parsed"
 
 
+def _scrubbed_and_safe(text: str) -> str:
+    """Sanitise ``text`` for display, then scrub again: escaping can expose a hidden authority.
+
+    ``sanitize_text`` turns a control character into its escape (a form feed becomes the four
+    characters ``\\x0c``). Whitespace ends an authority, an escape does not, so
+    ``"x\\x0cuser:token@host"`` only looks like userinfo once it has been escaped. Scrubbing after
+    sanitising catches that; scrubbing before it catches the credentials that are visible in the raw
+    value. Both passes are needed, and the scrub is idempotent, so running it twice is safe.
+    """
+    return scrub_bare_userinfo(scrub_url_userinfo(sanitize_text(text, max_len=300)))
+
+
 def redact_url(url: str) -> str:
     """Credential-free, display-safe form of an index / VCS / direct URL.
 
@@ -288,10 +300,10 @@ def redact_url(url: str) -> str:
         # e.g. scp-like "git+ssh://git@host:org/repo.git": keep the shape, drop credentials and query.
         head, sep, _query = raw.partition("?")
         scrubbed = scrub_bare_userinfo(scrub_url_userinfo(head))
-        return sanitize_text(scrubbed + ("?[REDACTED]" if sep else ""), max_len=300)
+        return _scrubbed_and_safe(scrubbed + ("?[REDACTED]" if sep else ""))
     if not parts.scheme or not parts.netloc:
         # No authority to parse (e.g. "user:token@host/path"), so the userinfo is stripped textually.
-        return sanitize_text(scrub_bare_userinfo(scrub_url_userinfo(raw)), max_len=300)
+        return _scrubbed_and_safe(scrub_bare_userinfo(scrub_url_userinfo(raw)))
     userinfo = ""
     if parts.username is not None or parts.password is not None:
         userinfo = "git@" if parts.username == "git" and parts.password is None else "[REDACTED]@"
@@ -304,7 +316,7 @@ def redact_url(url: str) -> str:
         rebuilt += "?[REDACTED]"
     if parts.fragment:
         rebuilt += f"#{scrub_url_userinfo(parts.fragment)}"
-    return sanitize_text(rebuilt, max_len=300)
+    return _scrubbed_and_safe(rebuilt)
 
 
 def url_host(url: str) -> str | None:
