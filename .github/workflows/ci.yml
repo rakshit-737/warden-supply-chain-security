@@ -440,7 +440,7 @@ jobs:
 
       - name: Fail if a lock file is out of date
         run: |
-          if ! git diff --exit-code -- 'backend/requirements*.lock.txt'; then
+          if ! git diff --exit-code -- 'backend/requirements*'; then
             echo "::error::A requirements lock file does not match its pins. Run backend/scripts/lock_requirements.sh and commit the result."
             exit 1
           fi

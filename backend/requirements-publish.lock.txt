@@ -1,5 +1,6 @@
 # Hash-locked resolution of requirements-publish.txt — DO NOT EDIT.
-# Regenerate with backend/scripts/lock_requirements.sh (uv, --universal, Python 3.12).
+# Regenerate with backend/scripts/lock_requirements.sh (uv, --universal, Python 3.12,
+# nothing published after 2026-10-03T00:00:00Z).
 certifi==2026.7.22 \
     --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775 \
     --hash=sha256:741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55
