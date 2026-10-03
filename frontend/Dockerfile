@@ -31,8 +31,14 @@ LABEL org.opencontainers.image.title="warden-web" \
       org.opencontainers.image.base.name="docker.io/nginxinc/nginx-unprivileged:1.30.5-alpine3.24" \
       org.opencontainers.image.base.digest="sha256:ed04ec1ff34502c339ee5c3ae3f855442398edc1d05591e2b98981dcbbd20b1e"
 
-# Root only for the filesystem lock-down below; the final USER is the image's unprivileged nginx (101).
+# Root only for the package upgrade and filesystem lock-down below; the final USER is the image's
+# unprivileged nginx (101).
 USER root
+
+# Alpine security updates published after the base image was built (the digest is bumped when
+# upstream rebuilds, but a fixed package often lands in the distro first). The image gate in ci.yml
+# fails on any fixable CRITICAL/HIGH, which is what makes this step visible when it is needed.
+RUN apk --no-cache upgrade
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html

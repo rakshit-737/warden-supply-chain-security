@@ -42,10 +42,13 @@ def test_one_input(data: bytes) -> None:
         assert dep.scope in {"required", "optional", "dev"}, f"unexpected scope {dep.scope!r}"
         for digest in dep.hashes:
             assert digest.startswith("sha256:"), f"malformed hash {digest!r}"
-        # Whatever sits before the first "@" of the authority is userinfo, and a credential may hide
-        # in it. Only an empty userinfo or the conventional "git" user may survive redaction.
-        authority = (dep.url or "").split("//", 1)[-1].split("/", 1)[0]
-        userinfo = authority.split("@", 1)[0] if "@" in authority else ""
+        # Userinfo is whatever precedes the last "@" of the authority, and a credential may hide in
+        # it. The authority ends at the first "/", "?" or "#" (RFC 3986), so an "@" in a path, query
+        # or fragment is not userinfo. Only an empty userinfo or the "git" SSH user may survive.
+        authority = (dep.url or "").split("//", 1)[-1]
+        for delimiter in ("/", "?", "#"):
+            authority = authority.split(delimiter, 1)[0]
+        userinfo = authority.rsplit("@", 1)[0] if "@" in authority else ""
         assert userinfo in {"", "git", "[REDACTED]"}, f"URL userinfo not redacted: {dep.url!r}"
     for warning in result.warnings:
         assert isinstance(warning, str)
