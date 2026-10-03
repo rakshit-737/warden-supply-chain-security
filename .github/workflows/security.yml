@@ -4,10 +4,15 @@
 #   gitleaks              secret scan over the FULL git history, configured by .gitleaks.toml
 #   trivy-fs              Trivy filesystem scan: dependency vulnerabilities, secrets, misconfigurations
 #   trivy-compose-images  Trivy vulnerability scan of each digest-pinned third-party image in docker-compose.yml
+#   fuzz                  Short Atheris (libFuzzer) run per fuzz harness in backend/fuzz
 #
-# CodeQL and gitleaks also run on every pull request: static analysis that only runs after a merge
-# cannot stop a bad change, and OpenSSF Scorecard's SAST check measures exactly that. The two Trivy
-# jobs stay off pull requests (see below).
+# CodeQL, gitleaks and the fuzz harnesses also run on every pull request: static analysis that only
+# runs after a merge cannot stop a bad change, and OpenSSF Scorecard's SAST check measures exactly
+# that. The two Trivy jobs stay off pull requests (see below).
+#
+# The fuzz job is a bounded regression fuzz of the parsers and the decoder, which read
+# attacker-controlled bytes (backend/fuzz/README.md). A crash fails the job and the offending input is
+# uploaded as an artifact; add it to the corpus so later runs replay it.
 #
 # Every job publishes SARIF to GitHub code scanning. Blocking gates for pull requests (pip-audit,
 # npm audit, Trivy scan of the two images built from this repository) live in ci.yml; here CodeQL and
@@ -304,3 +309,72 @@ jobs:
         with:
           sarif_file: ${{ runner.temp }}/trivy-image.sarif
           category: ${{ steps.scan.outputs.category }}
+
+  fuzz:
+    name: Fuzz (atheris, ${{ matrix.harness }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - harness: decode
+            corpus: decode
+          - harness: requirements
+            corpus: requirements
+          - harness: poetry_lock
+            corpus: poetry_lock
+    env:
+      # Atheris publishes a manylinux x86_64 wheel per CPython minor version; this is the 3.12 one.
+      # Update version and digest together, by hand (Dependabot cannot bump a hash-locked pin).
+      ATHERIS_PIN: "atheris==3.1.0"
+      ATHERIS_SHA256: "ec5e11f21a4c197fe91f7aea2b2de88e623c73a21fc07b105ac6329a1588457b"
+      # Per-harness budget. Long campaigns belong outside pull-request CI.
+      FUZZ_SECONDS: "120"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install runtime dependencies
+        working-directory: backend
+        run: python -m pip install -r requirements.txt
+
+      - name: Install atheris (hash-locked)
+        run: |
+          python -m pip install --no-deps --only-binary=:all: --require-hashes \
+            "${ATHERIS_PIN}" --hash="sha256:${ATHERIS_SHA256}"
+
+      - name: Fuzz
+        working-directory: backend
+        env:
+          PYTHONPATH: .
+          HARNESS: ${{ matrix.harness }}
+          CORPUS: ${{ matrix.corpus }}
+        run: |
+          # A finding is a crash file in the working directory; libFuzzer also exits non-zero.
+          python "fuzz/fuzz_${HARNESS}.py" \
+            -max_total_time="${FUZZ_SECONDS}" \
+            -max_len=65536 \
+            -print_final_stats=1 \
+            "fuzz/corpus/${CORPUS}"
+
+      - name: Upload crash inputs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-crashes-${{ matrix.harness }}
+          path: |
+            backend/crash-*
+            backend/oom-*
+            backend/timeout-*
+          if-no-files-found: ignore
+          retention-days: 14

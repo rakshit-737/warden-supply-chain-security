@@ -1,0 +1,7 @@
+[[package]]
+name = "Flask"
+version = "3.0.0"
+files = [{file = "flask-3.0.0.whl", hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"}]
+
+[package.dependencies]
+Werkzeug = ">=3"

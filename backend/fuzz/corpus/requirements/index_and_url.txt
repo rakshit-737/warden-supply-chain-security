@@ -1,0 +1,3 @@
+--index-url https://user:pw@pypi.example.com/simple
+Foo_Bar[Extra]>=1,<2 ; python_version<"3.9"
+pkg @ https://u:p@example.com/x.whl
