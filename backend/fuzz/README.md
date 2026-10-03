@@ -8,6 +8,10 @@ service against a scan — and a silently swallowed `MemoryError` is worse.
 Harnesses use [Atheris](https://github.com/google/atheris) (libFuzzer for CPython). Each one asserts
 the contract its target promises, not merely "does not crash":
 
+Contracts live in `contracts.py`, not in the harnesses: one definition runs under libFuzzer and under
+`run_local.py`, so a second copy cannot drift from the implementation and start reporting failures
+that are not bugs.
+
 | Harness | Target | Contract asserted |
 |---|---|---|
 | `fuzz_decode.py` | `app.analysis.decode.decode_layers` | never raises; depth, per-layer output and total output stay inside the configured bounds; the evidence summary is JSON-serialisable and holds no raw payload |
@@ -27,7 +31,14 @@ Any libFuzzer flag works (`-runs=N`, `-max_len=N`, `-jobs=N`). A crash is writte
 directory as `crash-<sha1>`; replay it with
 `PYTHONPATH=. python fuzz/fuzz_decode.py crash-<sha1>`.
 
-Atheris 3.x publishes manylinux x86_64 wheels only; on Windows or macOS use WSL, a Linux VM or the container.
+Atheris 3.x publishes manylinux x86_64 wheels only. Without it, run the same contracts over mutated
+corpus inputs — no Atheris, no coverage guidance, but it catches a contract that disagrees with the
+implementation:
+
+```bash
+PYTHONPATH=. python fuzz/run_local.py                     # every target, 20k inputs each
+PYTHONPATH=. python fuzz/run_local.py requirements 200000 --seed 7
+```
 
 ## In CI
 

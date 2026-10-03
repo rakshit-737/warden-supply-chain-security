@@ -1,0 +1,3 @@
+pkg @ https://host/x//user:pw@evil.example/y
+--index-url token@host/simple
+pkg2 @ https://h/p#//tok@evil.example
