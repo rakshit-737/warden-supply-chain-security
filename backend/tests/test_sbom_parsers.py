@@ -644,6 +644,9 @@ def test_manifest_type(path, expected):
         # Not userinfo: an "@" inside a path, and an empty userinfo.
         ("./local/dir/file@2x.whl", "./local/dir/file@2x.whl"),
         ("@host.example/simple", "@host.example/simple"),
+        # Corrupt scheme separator: still an authority with a credential in it.
+        ("https\x0e//u:p@host.example/x.whl", "https\\x0e//[REDACTED]@host.example/x.whl"),
+        ("//token@host.example/simple", "//[REDACTED]@host.example/simple"),
     ],
 )
 def test_redact_url(url, expected):

@@ -1,0 +1,2 @@
+pkg @ https//u:p@example.com/x.whl
+pkg2 @ //token@host/simple

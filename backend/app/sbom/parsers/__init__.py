@@ -106,6 +106,10 @@ _URL_USERINFO_RE = re.compile(r"(?P<scheme>\b[A-Za-z][A-Za-z0-9+.\-]{0,20}://)(?
 # as a path rather than an authority. A direct requirement reference may be written that way, and the
 # credential in it is just as real as in a scheme'd URL.
 _BARE_USERINFO_RE = re.compile(r"^(?P<userinfo>[^\s/@?#\[\]]{1,256})@(?=[^\s/@?#])")
+# Userinfo after a protocol-relative "//", i.e. an authority whose scheme is absent or malformed
+# ("https\x0e//user:token@host"). The scheme pattern above requires a well-formed "scheme://", and a
+# corrupted separator must not be a way to keep a credential in stored output.
+_NETLOC_USERINFO_RE = re.compile(r"//(?P<userinfo>[^\s/@?#\[\]]{1,256})@(?=[^\s/@?#])")
 # Byte-order marks, longest first (the UTF-32-LE BOM starts with the UTF-16-LE BOM).
 _BOMS: tuple[tuple[bytes, str], ...] = (
     (codecs.BOM_UTF32_LE, "utf-32"),
@@ -157,18 +161,26 @@ class ManifestParseResult:
 # ======================================================================================
 # Small shared helpers
 # ======================================================================================
+def _redacted_userinfo(userinfo: str) -> str:
+    """``git`` (the conventional SSH user) survives; anything else may be a credential."""
+    return "git" if userinfo == "git" else "[REDACTED]"
+
+
 def scrub_url_userinfo(text: str) -> str:
-    """Replace the userinfo of every URL in ``text`` with ``[REDACTED]`` (``git@`` is kept)."""
-    return _URL_USERINFO_RE.sub(
-        lambda m: f"{m.group('scheme')}{'git' if m.group('userinfo') == 'git' else '[REDACTED]'}@", text
+    """Replace the userinfo of every URL in ``text`` with ``[REDACTED]`` (``git@`` is kept).
+
+    Both a well-formed ``scheme://user@host`` and a bare ``//user@host`` authority are covered; the
+    second form also catches a URL whose scheme separator is corrupt.
+    """
+    text = _URL_USERINFO_RE.sub(
+        lambda m: f"{m.group('scheme')}{_redacted_userinfo(m.group('userinfo'))}@", text
     )
+    return _NETLOC_USERINFO_RE.sub(lambda m: f"//{_redacted_userinfo(m.group('userinfo'))}@", text)
 
 
 def scrub_bare_userinfo(text: str) -> str:
     """Replace leading scheme-less userinfo (``user:token@host/path``) with ``[REDACTED]@``."""
-    return _BARE_USERINFO_RE.sub(
-        lambda m: f"{'git' if m.group('userinfo') == 'git' else '[REDACTED]'}@", text
-    )
+    return _BARE_USERINFO_RE.sub(lambda m: f"{_redacted_userinfo(m.group('userinfo'))}@", text)
 
 
 def warn(warnings: list[str], message: str) -> None:
