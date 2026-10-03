@@ -26,12 +26,17 @@ Until step 3, tagged releases build and attest everything but skip the upload.
 
 ## Cutting a release
 
-1. Update the version in `pyproject.toml`, `backend/pyproject.toml`, `backend/app/__init__.py` and
-   `frontend/package.json`, and add a section to `CHANGELOG.md`.
-2. Commit, push, and wait for CI on that commit to pass.
+1. Update the version in `pyproject.toml`, `backend/pyproject.toml`, `backend/app/__init__.py`,
+   `frontend/package.json` and `frontend/package-lock.json` (both root entries), and add a section
+   to `CHANGELOG.md`. The tag must equal `v<version of pyproject.toml>` or the build refuses it.
+2. Open a pull request, merge it, and wait for CI on the merge commit to pass. `main` is protected,
+   and `verify-release-commit` checks that ci.yml passed for the exact commit the tag points at.
 3. `git tag -a vX.Y.Z -m "Warden X.Y.Z" && git push origin vX.Y.Z`
-4. Approve the `pypi` deployment in the workflow run.
-5. `gh release create vX.Y.Z --verify-tag --notes-file <notes>` with the changelog section.
+4. The `release-assets` job creates the GitHub release and attaches the distributions, the SBOM,
+   `SHA256SUMS` and the SLSA provenance bundle, each with a Sigstore `.sigstore.json` signature.
+   Edit the release notes afterwards if the generated ones need the changelog section.
+5. Approve the `pypi` deployment in the workflow run (only when `PYPI_PUBLISH` is `true`; without it
+   the tag builds, attests and signs everything but uploads nothing).
 
 Verify a published file against its provenance with
 `gh attestation verify <file> --repo rakshit-737/warden-supply-chain-security`.

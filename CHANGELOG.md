@@ -2,11 +2,37 @@
 
 ## Unreleased
 
+## 2.1.0
+
 ### Projects
 - npm manifests: `package.json`, `package-lock.json` (lockfile v1–v3) and `npm-shrinkwrap.json`
   become SBOM components (`pkg:npm` purls, sha512 integrity hashes, dev/optional scopes) with
   dependency edges that follow Node's nested `node_modules` resolution. Unpinned direct npm
   dependencies without a lock file are hygiene findings. Package analysis stays PyPI-only.
+
+### Security
+- `redact_url` kept a credential in a stored reference in six cases, each a different way to write
+  an authority: without a scheme (`user:token@host/path`), after a corrupted scheme separator
+  (`https\x0e//user:token@host`), with a bracket in the userinfo (`//to[[ken@host`), inside a path
+  or fragment (`https://host/x//user:token@elsewhere`), separated by a control character that
+  Python's `\s` treats as whitespace (`token@\x1fhost`), and one that only becomes visible once the
+  value is escaped for display (`http//:sus\x0cer:pw@host`). The stored value reaches SBOMs,
+  reports and the console, so each one leaked the credential to everyone who could read a scan.
+  Found by the new fuzz harnesses; every case has a regression test.
+- PyJWT upgraded to 2.15.0 (PYSEC-2026-4141).
+- The web image applies Alpine security updates at build time, which closes libexpat
+  CVE-2026-93990 and pcre2 CVE-2026-103111 in the pinned base image.
+
+### Build and CI
+- Every Python dependency is installed from a hash-locked requirements file
+  (`pip install --require-hashes`) in CI, the Dockerfile and the GitHub Action. Locks are generated
+  by `backend/scripts/lock_requirements.sh` and a CI job fails when one drifts from its pins.
+- Releases carry Sigstore-signed assets: distributions, the CycloneDX SBOM, `SHA256SUMS` and the
+  SLSA provenance bundle, each with a `.sigstore.json`.
+- Fuzz harnesses (Atheris) for the layered decoder and the manifest parsers run on every pull
+  request, with `fuzz/run_local.py` for machines that have no Atheris wheel.
+- CodeQL and gitleaks run on pull requests rather than only after a merge.
+- A landing page is published at the root of the documentation site.
 
 ## 2.0.0
 
