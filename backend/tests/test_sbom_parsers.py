@@ -651,6 +651,12 @@ def test_manifest_type(path, expected):
         ("//to[[ken@host.example/simple", "//[REDACTED]@host.example/simple"),
         ("https://tok[en@host.example/simple", "https://[REDACTED]@host.example/simple"),
         ("https://u@host.example@evil.example/x", "https://[REDACTED]@evil.example/x"),
+        # An authority can hide in the path or the fragment of an otherwise ordinary URL.
+        ("https://host.example/x//user:pw@evil.example/y", "https://host.example/x//[REDACTED]@evil.example/y"),
+        ("https://host.example/x#//token@evil.example", "https://host.example/x#//[REDACTED]@evil.example"),
+        ("git+ssh://git+ssh://token@host.example/x", "git+ssh://git+ssh//[REDACTED]@host.example/x"),
+        # Python's \\s also matches the separators \\x1c-\\x1f; they must not end an authority.
+        ("token@\x1fhost.example/simple", "[REDACTED]@\\x1fhost.example/simple"),
     ],
 )
 def test_redact_url(url, expected):

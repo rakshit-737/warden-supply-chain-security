@@ -106,12 +106,17 @@ _BARE_KEY_RE = re.compile(r"[A-Za-z0-9_-]+")
 # The userinfo class therefore excludes only those delimiters and whitespace: a token may contain
 # anything else, brackets included, and the greedy match consumes up to that last "@". An IPv6 host
 # ("https://[::1]:8443/simple") has no "@" at all, so it never matches.
-_USERINFO = r"[^\s/?#]{1,256}"
+#
+# Whitespace is spelled out instead of "\s": for str patterns Python's "\s" is Unicode-aware and also
+# matches the separators \x1c-\x1f, which would make "token@\x1fhost" look like two whitespace-split
+# words and leave the credential in place. Only real whitespace ends an authority here.
+_WS = r" \t\n\r\f\v"
+_USERINFO = rf"[^{_WS}/?#]{{1,256}}"
 _URL_USERINFO_RE = re.compile(rf"(?P<scheme>\b[A-Za-z][A-Za-z0-9+.\-]{{0,20}}://)(?P<userinfo>{_USERINFO})@")
 # Userinfo of a reference written without a scheme ("user:token@host/path"), which urlsplit reports
 # as a path rather than an authority. A direct requirement reference may be written that way, and the
 # credential in it is just as real as in a scheme'd URL.
-_BARE_USERINFO_RE = re.compile(rf"^(?P<userinfo>{_USERINFO})@(?=[^\s/@?#])")
+_BARE_USERINFO_RE = re.compile(rf"^(?P<userinfo>{_USERINFO})@(?=[^{_WS}/@?#])")
 # Userinfo after a protocol-relative "//", i.e. an authority whose scheme is absent or malformed
 # ("https\x0e//user:token@host"). The scheme pattern above requires a well-formed "scheme://", and a
 # corrupted separator must not be a way to keep a credential in stored output.
@@ -292,11 +297,13 @@ def redact_url(url: str) -> str:
         userinfo = "git@" if parts.username == "git" and parts.password is None else "[REDACTED]@"
     if ":" in host:
         host = f"[{host}]"
-    rebuilt = f"{parts.scheme}://{userinfo}{host}{f':{port}' if port else ''}{parts.path}"
+    # The path and fragment are attacker-controlled too and may carry an authority of their own
+    # ("https://host/x//user:token@elsewhere"), so they are scrubbed rather than copied verbatim.
+    rebuilt = f"{parts.scheme}://{userinfo}{host}{f':{port}' if port else ''}{scrub_url_userinfo(parts.path)}"
     if parts.query:
         rebuilt += "?[REDACTED]"
     if parts.fragment:
-        rebuilt += f"#{parts.fragment}"
+        rebuilt += f"#{scrub_url_userinfo(parts.fragment)}"
     return sanitize_text(rebuilt, max_len=300)
 
 
