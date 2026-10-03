@@ -349,9 +349,13 @@ jobs:
         run: python -m pip install --require-hashes -r requirements.lock.txt
 
       - name: Install atheris (hash-locked)
+        # pip accepts --hash only inside a requirements file, so the pin is written to one first.
         run: |
+          set -euo pipefail
+          printf '%s --hash=sha256:%s\n' "${ATHERIS_PIN}" "${ATHERIS_SHA256}" \
+            > "${RUNNER_TEMP}/atheris-requirements.txt"
           python -m pip install --no-deps --only-binary=:all: --require-hashes \
-            "${ATHERIS_PIN}" --hash="sha256:${ATHERIS_SHA256}"
+            -r "${RUNNER_TEMP}/atheris-requirements.txt"
 
       - name: Fuzz
         working-directory: backend
