@@ -1,0 +1,2 @@
+pkg @ user:s3cret@example.com/x.whl
+token@private.example/simple
