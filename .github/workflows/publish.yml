@@ -442,6 +442,9 @@ jobs:
       - name: Attach assets to the release
         env:
           GH_TOKEN: ${{ github.token }}
+          # This job never checks the repository out (it only needs the built artifacts), so gh has no
+          # git remote to infer the repository from and every call needs GH_REPO.
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
