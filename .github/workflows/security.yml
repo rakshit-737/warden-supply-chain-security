@@ -5,6 +5,10 @@
 #   trivy-fs              Trivy filesystem scan: dependency vulnerabilities, secrets, misconfigurations
 #   trivy-compose-images  Trivy vulnerability scan of each digest-pinned third-party image in docker-compose.yml
 #
+# CodeQL and gitleaks also run on every pull request: static analysis that only runs after a merge
+# cannot stop a bad change, and OpenSSF Scorecard's SAST check measures exactly that. The two Trivy
+# jobs stay off pull requests (see below).
+#
 # Every job publishes SARIF to GitHub code scanning. Blocking gates for pull requests (pip-audit,
 # npm audit, Trivy scan of the two images built from this repository) live in ci.yml; here CodeQL and
 # Trivy report into code scanning for triage. The gitleaks job additionally FAILS when a leak is
@@ -35,6 +39,7 @@ name: Security
 on:
   push:
     branches: [main]
+  pull_request:
   schedule:
     # Weekly, Monday 04:23 UTC.
     - cron: "23 4 * * 1"
@@ -44,8 +49,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: security-${{ github.ref }}
-  cancel-in-progress: false
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  # Superseded pull-request runs are cancelled; runs on main and scheduled runs always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   codeql:
@@ -139,6 +145,9 @@ jobs:
 
   trivy-fs:
     name: Trivy filesystem scan
+    # Not on pull requests: ci.yml already gates dependency vulnerabilities (pip-audit, npm audit) and
+    # scans the two images built from this repository.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -198,6 +207,7 @@ jobs:
 
   compose-images:
     name: List digest-pinned Compose images
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
