@@ -433,7 +433,7 @@ jobs:
           enable-cache: false
 
       - name: Regenerate the lock files
-        run: backend/scripts/lock_requirements.sh
+        run: bash backend/scripts/lock_requirements.sh
 
       - name: Fail if a lock file is out of date
         run: |
