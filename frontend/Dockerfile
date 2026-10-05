@@ -9,7 +9,7 @@
 #   nginx mainline and are held for manual review in .github/dependabot.yml.
 
 # ---- Stage 1: build the static bundle --------------------------------------------------------
-FROM node:26-alpine3.24@sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868 AS builder
+FROM node:26-alpine3.24@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS builder
 
 WORKDIR /app
 COPY package.json package-lock.json ./
