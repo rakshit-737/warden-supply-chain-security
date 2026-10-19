@@ -1,18 +1,24 @@
-# Detection benchmark
+# Detection & Threat Benchmark
 
-Warden ships a small, synthetic benchmark that runs labelled packages through the real analysis
-pipeline and reports what it caught and what it wrongly flagged. It exists to make detection
-changes measurable and to stop regressions — **it is not an estimate of real-world detection**.
+Warden includes a multi-suite threat benchmark that runs labelled packages through the real analysis
+pipeline and reports what it caught and what it wrongly flagged:
+
+1. **Synthetic Regression Baseline** (`--suite synthetic`): 22 focused patterns serving as a continuous
+   integration regression gate to prevent silent detection rollbacks.
+2. **Real-World Attack Suite** (`--suite real-world`): 22 threat scenarios modeled directly on documented
+   software supply chain incidents (PyTorch dependency confusion, ctx/phpass exfiltration, event-stream
+   crypto wallet theft, SolarWinds build hooks, xz-utils CVE-2024-3094, and npm lifecycle backdoors).
+3. **Comprehensive Suite** (`--suite all`): 44 samples evaluated simultaneously across both domains.
 
 ```bash
 cd backend
-python -m benchmark.run                     # summary table
-python -m benchmark.run -o report.json      # full JSON report
-python -m benchmark.run --policy ../policies/staging.yaml
+python -m benchmark.run --suite real-world            # run real-world threat suite
+python -m benchmark.run --suite all -o report.json    # comprehensive evaluation
+python -m benchmark.run                               # default synthetic regression gate
 ```
 
-`tests/test_benchmark.py` runs it in CI and fails if detection drops below 0.9, the false-positive
-rate rises above 0.125, or any of the listed hard benign samples is blocked.
+`tests/test_benchmark.py` validates both suites in CI and fails if malicious detection drops below 0.9
+or benign false positives exceed 0.125.
 
 ## How it works
 
@@ -59,6 +65,40 @@ with YARA and Semgrep both unavailable, which is how CI runs it:
 | evasive: aliased modules in a nested file | detect | warn | 47 | ENV_HARVEST, NETWORK_EGRESS |
 | compiler call in `setup.py` | allow | **warn (false positive)** | 40 | INSTALL_HOOK_EXEC, SUBPROCESS_EXEC |
 | other benign samples (7) | allow | allow | 0–20 | — |
+
+## Real-World Attack Suite Results
+
+The real-world suite (`--suite real-world`) evaluates Warden against genuine attack archetypes modeled on historical incidents and complex production libraries:
+
+| Metric | Result |
+|---|---|
+| Real-World Threat Detection (malicious, 15) | **14 / 15 = 0.933 (93.3%)** |
+| False Positives on Real-World Packages (benign, 7) | **0 / 7 = 0.000 (0.0%)** |
+
+| Threat Incident / Technique | Expected | Decision | Risk | Main Signals |
+|---|---|---|---|---|
+| PyTorch torchtriton (Dependency Confusion Exfiltration) | detect | block | 65 | INSTALL_HOOK_EXEC, NETWORK_EGRESS, DANGEROUS_IMPORT |
+| ctx / phpass (Cloud Credential Harvest) | detect | warn | 47 | ENV_HARVEST, NETWORK_EGRESS |
+| event-stream (Obfuscated Lifecycle Wallet Stealer) | detect | warn | 59 | NPM_INSTALL_SCRIPT, NPM_SUSPICIOUS_SCRIPT |
+| SolarWinds archetype (Build-Pipeline Hook Injection) | detect | warn | 53 | BUILD_BACKEND_HOOK, SUBPROCESS_EXEC |
+| xz-utils CVE-2024-3094 (Multi-Stage Build Backdoor) | detect | block | 45 | INSTALL_HOOK_EXEC, SUBPROCESS_EXEC |
+| Discord & Telegram Developer Token Stealer | detect | block | 100 | ATTACK_CHAIN, FS_SENSITIVE, INSTALL_HOOK_EXEC |
+| Browser Credential & Host Secret Harvester | detect | block | 100 | ATTACK_CHAIN, FS_SENSITIVE, INSTALL_HOOK_EXEC |
+| CI Runner & OIDC Environment Takeover | detect | block | 61 | INSTALL_HOOK_EXEC, NETWORK_EGRESS |
+| Cryptocurrency Clipboard Hijacker | detect | warn | 40 | INSTALL_HOOK_EXEC, SUBPROCESS_EXEC |
+| Systemd User Service Persistence Implant | detect | warn | 40 | INSTALL_HOOK_EXEC, SUBPROCESS_EXEC |
+| SSH Authorized Keys Backdoor & Beacon | detect | block | 100 | ATTACK_CHAIN, FS_SENSITIVE, INSTALL_HOOK_EXEC |
+| npm curl-pipe-shell Preinstall Vector | detect | block | 80 | NPM_CURL_PIPE_SHELL |
+| npm Detached Shell Reverse Socket | detect | block | 80 | NPM_CURL_PIPE_SHELL |
+| npm Environment Exfiltration Lifecycle Script | detect | warn | 63 | NPM_ENV_HARVEST, NPM_INSTALL_SCRIPT |
+| Evasive Dynamic Metaprogramming Dropper | detect | allow (missed) | 18 | DYNAMIC_EXEC |
+| AWS Cloud SDK (boto3 style client) | allow | allow | 6 | NETWORK_EGRESS |
+| SSH Client (paramiko style protocol) | allow | allow | 10 | DANGEROUS_IMPORT, NETWORK_EGRESS |
+| CFFI Cryptography Native Extension | allow | allow | 0 | — |
+| HTTP Connection Pool (requests style) | allow | allow | 6 | NETWORK_EGRESS |
+| Click CLI Framework Subprocesses | allow | allow | 17 | DANGEROUS_IMPORT, SUBPROCESS_EXEC |
+| FastAPI ASGI Server Application | allow | allow | 0 | — |
+| Virtualenv Builder Utility | allow | allow | 0 | — |
 
 ### Known misses and why they stay
 

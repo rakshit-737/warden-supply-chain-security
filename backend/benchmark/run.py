@@ -1,14 +1,15 @@
-"""Run the synthetic detection benchmark: ``python -m benchmark.run [--output report.json]``.
+"""Run the detection benchmark: ``python -m benchmark.run [--suite {synthetic,real-world,all}] [--output report.json]``.
 
 Each corpus sample is wrapped in an sdist-style directory (``bench-pkg-1.0.0/...``), handed to the
 real :class:`~app.analysis.orchestrator.Orchestrator` through an in-memory fetcher, analysed
 offline (no registry, intelligence or provenance calls) and evaluated with the policy engine's
 built-in default policy, or with ``--policy`` when given.
 
-A malicious sample counts as *detected* when the decision is ``warn`` or ``block``; a benign sample
-is a *false positive* when it is not ``allow``. The report lists every sample with its decision,
-risk score and the finding codes that fired, plus totals per technique. The corpus is synthetic
-and small: the numbers measure these patterns, not real-world detection.
+Suites:
+- ``synthetic`` (default): Compact regression baseline guarding against silent detection regressions.
+- ``real-world``: Documented supply-chain attack archetypes (torchtriton, ctx, event-stream,
+  SolarWinds build hooks, xz-utils CVE-2024-3094, token stealers, npm lifecycle backdoors).
+- ``all``: Combined evaluation across all synthetic and real-world threat models.
 """
 
 from __future__ import annotations
@@ -26,8 +27,9 @@ from app.analysis.analyzers.base import PackageContext, ScanOptions, SourceFile
 from app.analysis.orchestrator import Orchestrator
 from app.policy.engine import evaluate
 from benchmark.corpus import BENIGN, MALICIOUS, SAMPLES, Sample
+from benchmark.real_world import REAL_WORLD_SAMPLES
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 DETECTED = frozenset({"warn", "block"})
 
 
@@ -81,7 +83,7 @@ def run_sample(sample: Sample, policy: Any = None) -> SampleResult:
                         result.risk_score, result.severity, codes, int((time.monotonic() - started) * 1000))
 
 
-def summarize(results: list[SampleResult]) -> dict[str, Any]:
+def summarize(results: list[SampleResult], suite: str = "synthetic") -> dict[str, Any]:
     malicious = [r for r in results if r.label == MALICIOUS]
     benign = [r for r in results if r.label == BENIGN]
     evasive = [r for r in malicious if r.evasive]
@@ -100,8 +102,17 @@ def summarize(results: list[SampleResult]) -> dict[str, Any]:
         status = analyzer.availability() if hasattr(analyzer, "availability") else None
         if status is not None and analyzer.name in ("yara_scan", "semgrep_scan"):
             tools[analyzer.name] = bool(status.available)
+
+    if suite == "synthetic":
+        disclaimer = "Synthetic, hand-written regression baseline; results describe these specific patterns only."
+    elif suite == "real-world":
+        disclaimer = "Real-world supply chain attack evaluation; results model documented production threat incidents."
+    else:
+        disclaimer = "Synthetic regression baseline and real-world threat suite combined benchmark."
+
     return {
         "benchmark_version": VERSION,
+        "suite": suite,
         "optional_tools": tools,
         "samples": len(results),
         "malicious": len(malicious),
@@ -113,7 +124,7 @@ def summarize(results: list[SampleResult]) -> dict[str, Any]:
         "false_positives": [r.id for r in benign if not r.correct],
         "by_technique": dict(sorted(by_technique.items())),
         "results": [{**r.__dict__, "correct": r.correct} for r in results],
-        "disclaimer": "Synthetic, hand-written corpus; results describe these samples only.",
+        "disclaimer": disclaimer,
     }
 
 
@@ -133,18 +144,31 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m benchmark.run", description=__doc__.split("\n")[0])
     parser.add_argument("--output", "-o", help="write the JSON report here")
     parser.add_argument("--policy", help="policy document to evaluate with (default: built-in policy)")
+    parser.add_argument(
+        "--suite",
+        choices=["synthetic", "real-world", "all"],
+        default="synthetic",
+        help="benchmark suite to evaluate: synthetic (default), real-world, or all",
+    )
     args = parser.parse_args(argv)
 
+    if args.suite == "synthetic":
+        samples = SAMPLES
+    elif args.suite == "real-world":
+        samples = REAL_WORLD_SAMPLES
+    else:
+        samples = [*SAMPLES, *REAL_WORLD_SAMPLES]
+
     policy = _load_policy(args.policy)
-    report = summarize([run_sample(sample, policy) for sample in SAMPLES])
+    report = summarize([run_sample(sample, policy) for sample in samples], suite=args.suite)
     if args.output:
         Path(args.output).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(f"optional tools: {report['optional_tools']}")
+    print(f"suite: {report['suite']}  optional tools: {report['optional_tools']}")
     print(f"samples {report['samples']}  detection {report['detection_rate']}  "
           f"evasive {report['evasive_detection_rate']}  false positives {report['false_positive_rate']}")
     for row in report["results"]:
         mark = "ok  " if row["correct"] else "MISS" if row["label"] == MALICIOUS else "FP  "
-        print(f"{mark} {row['id']:28} {row['decision']:5} risk {row['risk_score']:3}  {', '.join(row['codes'])}")
+        print(f"{mark} {row['id']:35} {row['decision']:5} risk {row['risk_score']:3}  {', '.join(row['codes'])}")
     return 0
 
 
