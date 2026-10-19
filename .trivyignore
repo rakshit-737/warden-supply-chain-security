@@ -1,0 +1,17 @@
+# Third-party container image vulnerabilities (isolated in internal docker network)
+# Go runtime & stdlib DoS vulnerabilities in Grafana/Prometheus bundled binaries
+CVE-2026-56851
+CVE-2026-97031
+CVE-2026-78669
+CVE-2026-78667
+
+# kin-openapi DoS/auth discrepancies in Grafana binary
+CVE-2026-100349
+CVE-2026-100351
+CVE-2026-100352
+CVE-2026-100353
+CVE-2026-100354
+
+# OpenSSL vulnerabilities in Redis Alpine base image
+CVE-2026-84782
+CVE-2026-45447
