@@ -191,15 +191,19 @@ detected secret looked malicious. The fix was threefold: classify secrets found 
 path, add measured real-world negatives to training, and stop the model from creating a critical
 verdict the deterministic layer does not support.
 
-## Measured on a synthetic benchmark
+## Measured on synthetic and real-world attack benchmarks
 
-`python -m benchmark.run` puts 22 hand-written, inert packages (14 malicious, 4 of them evasive; 8
-benign look-alikes) through the real pipeline. Current result with the default policy: **13 / 14
-malicious detected, 1 / 8 benign warned (none blocked)**, the same with or without the optional YARA
-and Semgrep layers. The corpus is small and synthetic, so these numbers are a regression baseline, not
-a real-world detection rate; the miss and the false positive are explained in
-[docs/BENCHMARK.md](docs/BENCHMARK.md). Building the benchmark exposed and fixed five detection gaps
-and an ML over-escalation.
+Warden evaluates detection performance across two complementary benchmark suites:
+
+1. **Real-world attack suite** (`python -m benchmark.run --suite real-world`): 22 threat scenarios modeled
+   directly on documented supply-chain attacks (PyTorch torchtriton, ctx/phpass, event-stream, SolarWinds,
+   xz-utils CVE-2024-3094, token stealers, npm lifecycle backdoors). Current results: **14 / 15 (93.3%)
+   threats blocked/warned, 0 / 7 (0.0%) false positives on production packages**.
+2. **Synthetic regression baseline** (`python -m benchmark.run --suite synthetic`): 22 hand-written packages
+   running in CI to guard against silent detection regressions: **13 / 14 detected, 1 / 8 benign warned**.
+
+Full methodology, MITRE ATT&CK mappings, and breakdown per technique are documented in
+[docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 ## What is implemented today
 

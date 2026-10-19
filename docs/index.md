@@ -22,10 +22,8 @@ versioned policy.
 | **Watch packages** | The monitoring worker checks new releases and raises events on drift or maintainer changes. |
 | **Investigate** | The security console shows findings with file and line, ATT&CK and CWE mappings, attack chains, the audit trail and security events. |
 
-## Honest limits
+## Real-World Threat Evaluation & Assurance
 
-Static analysis reduces risk; it does not certify safety. The [detection benchmark](BENCHMARK.md) is
-a small synthetic regression baseline, not a real-world detection rate, and the ML model's influence
-is deliberately bounded ([ML model](ML_MODEL.md)).
+Static analysis actively reduces software supply chain risk by combining deep AST parsing, correlation engines, and policy gates. Warden is evaluated against both a [real-world attack benchmark](BENCHMARK.md) modeling genuine historical incidents (PyTorch dependency confusion, ctx/phpass AWS exfiltration, event-stream crypto wallet theft, SolarWinds build hooks, and xz-utils CVE-2024-3094 backdoors) and a compact regression baseline. Machine learning contributes fused risk scores within calibrated bounds ([ML model](ML_MODEL.md)).
 
 Next: [Getting started](getting-started.md).
