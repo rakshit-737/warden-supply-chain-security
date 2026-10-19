@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
 
 from app.analysis.analyzers.base import BaseAnalyzer, PackageContext
 from app.analysis.findings import Finding, Location, Severity
@@ -66,7 +65,7 @@ class NpmScriptsAnalyzer(BaseAnalyzer):
         for source_file in pkg_json_files:
             try:
                 data = json.loads(source_file.text)
-            except Exception:
+            except Exception:  # nosec B112 - invalid JSON in candidate file is skipped
                 continue
 
             if not isinstance(data, dict):
@@ -126,7 +125,9 @@ class NpmScriptsAnalyzer(BaseAnalyzer):
                             severity=Severity.high,
                             weight=8.0,
                             confidence=0.85,
-                            message=f"Lifecycle script '{hook_name}' accesses sensitive credentials or environment keys",
+                            message=(
+                                f"Lifecycle script '{hook_name}' accesses sensitive credentials or environment keys"
+                            ),
                             evidence={"hook": hook_name, "command": cmd[:250]},
                             category=Category.CREDENTIAL_ACCESS.value,
                             location=Location(file=source_file.relpath),

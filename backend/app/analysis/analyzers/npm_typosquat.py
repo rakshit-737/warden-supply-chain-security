@@ -9,13 +9,11 @@ Detects npm package names that imitate popular packages in the npm ecosystem:
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
 
 from app.analysis.analyzers.base import BaseAnalyzer, PackageContext
-from app.analysis.findings import Finding, Location, Severity
+from app.analysis.findings import Finding, Severity
 from app.analysis.signals import Category, Code
 from app.core.logging import get_logger
 
@@ -142,7 +140,10 @@ class NpmTyposquatAnalyzer(BaseAnalyzer):
                         severity=Severity.critical if rank <= 50 else Severity.high,
                         weight=9.0,
                         confidence=0.90,
-                        message=f"npm package '{candidate}' uses homoglyph substitution targeting '{target}' (rank #{rank})",
+                        message=(
+                            f"npm package '{candidate}' uses homoglyph substitution "
+                            f"targeting '{target}' (rank #{rank})"
+                        ),
                         evidence={"kind": "homoglyph", "target": target, "rank": rank},
                         category=Category.TYPOSQUAT.value,
                         cwe=["CWE-1357"],
@@ -162,7 +163,10 @@ class NpmTyposquatAnalyzer(BaseAnalyzer):
                             severity=sev,
                             weight=8.0,
                             confidence=0.85,
-                            message=f"npm package '{candidate}' differs by 1 character from popular '{target}' (rank #{rank})",
+                            message=(
+                                f"npm package '{candidate}' differs by 1 character "
+                                f"from popular '{target}' (rank #{rank})"
+                            ),
                             evidence={"kind": "typo_d1", "target": target, "rank": rank, "distance": 1},
                             category=Category.TYPOSQUAT.value,
                             cwe=["CWE-1357"],
@@ -183,7 +187,10 @@ class NpmTyposquatAnalyzer(BaseAnalyzer):
                             severity=Severity.medium,
                             weight=5.0,
                             confidence=0.75,
-                            message=f"npm package '{candidate}' is a combosquat of popular '{target}' with affix '{affix}'",
+                            message=(
+                                f"npm package '{candidate}' is a combosquat of "
+                                f"popular '{target}' with affix '{affix}'"
+                            ),
                             evidence={"kind": "combosquat", "target": target, "affix": affix, "rank": rank},
                             category=Category.TYPOSQUAT.value,
                             cwe=["CWE-1357"],

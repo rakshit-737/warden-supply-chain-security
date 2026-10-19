@@ -17,14 +17,12 @@ It deliberately errs on the side of reporting reachability when uncertain.
 from __future__ import annotations
 
 import ast
+import logging
 import os
-from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
-
-import logging
 
 log = logging.getLogger("warden.reachability")
 
@@ -168,7 +166,7 @@ def assess_reachability(
                     continue
                 code_text = fpath.read_text(encoding="utf-8", errors="replace")
                 tree = ast.parse(code_text, filename=str(fpath))
-            except Exception:
+            except Exception:  # nosec B112 - skip unparseable or unreadable source file
                 continue
 
             rel_file = str(fpath.relative_to(root))

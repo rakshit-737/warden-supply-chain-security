@@ -160,7 +160,8 @@ def cmd_run(args) -> int:
         gate_res = _run(deps, args)
         if gate_res != 0 and not getattr(args, "force", False):
             err_color = "" if args.no_color else "\033[91m"
-            print(f"{err_color}[warden firewall] Install aborted due to security policy violations.{color_reset}", file=sys.stderr)
+            msg = f"{err_color}[warden firewall] Install aborted due to security policy violations.{color_reset}"
+            print(msg, file=sys.stderr)
             return 2
     else:
         print("[warden firewall] Passing through to package manager (run with --api/--token for active gating).")
@@ -189,7 +190,12 @@ def cmd_reachability(args) -> int:
         status_val = f.status.value
         status_color = ""
         if not args.no_color:
-            status_color = "\033[92m" if status_val == "transitive_dormant" else ("\033[91m" if status_val == "reachable" else "\033[93m")
+            if status_val == "transitive_dormant":
+                status_color = "\033[92m"
+            elif status_val == "reachable":
+                status_color = "\033[91m"
+            else:
+                status_color = "\033[93m"
         reset = "" if args.no_color else "\033[0m"
 
         print(f"Advisory:  {f.advisory_id}")
@@ -239,7 +245,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_p = sub.add_parser("run", help="Wrap pip/npm to scan dependencies before installing", parents=[api_options])
     run_p.add_argument("--force", action="store_true", help="install even if policy warns or blocks")
-    run_p.add_argument("command_args", nargs=argparse.REMAINDER, help="the package install command, e.g. pip install requests")
+    run_p.add_argument(
+        "command_args",
+        nargs=argparse.REMAINDER,
+        help="the package install command, e.g. pip install requests",
+    )
     run_p.set_defaults(func=cmd_run)
 
     reach_p = sub.add_parser("reachability", help="Assess whether vulnerable symbols are reachable in project AST")

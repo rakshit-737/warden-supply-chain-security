@@ -17,7 +17,6 @@ Endpoints:
 from __future__ import annotations
 
 import re
-from typing import Any
 from urllib.parse import quote, unquote
 
 import httpx
@@ -33,7 +32,7 @@ from app.analysis.orchestrator import AnalysisResult, Orchestrator
 from app.core.config import settings
 from app.core.http import SafeHttpClient
 from app.core.logging import get_logger
-from app.db.models import DEFAULT_ENVIRONMENT, Decision, Policy, Scan
+from app.db.models import DEFAULT_ENVIRONMENT, Policy, Scan
 from app.db.session import get_db
 from app.policy.engine import evaluate
 from app.policy.exceptions import load_active_exceptions
@@ -58,7 +57,7 @@ def _parse_pkg_filename(filename: str) -> tuple[str, str | None]:
         if filename.endswith((".tar.gz", ".zip", ".tar.bz2")):
             name, ver = parse_sdist_filename(filename)
             return canonicalize_name(name), str(ver)
-    except Exception:
+    except Exception:  # nosec B110 - fall back to regex on unparseable wheel/sdist name
         pass
 
     m = _FALLBACK_FILE_RE.match(filename)
@@ -149,7 +148,7 @@ def pypi_simple_project(
                     media_type="application/vnd.pypi.simple.v1+json",
                     headers={"X-Warden-Firewall": "active"},
                 )
-        except Exception:
+        except Exception:  # nosec B110 - fallback to HTML handling if JSON fails
             pass  # Fallback to HTML handling
 
     # HTML parsing & link rewriting
@@ -160,7 +159,10 @@ def pypi_simple_project(
         # Extract filename from url
         fname = orig_url.split("#")[0].split("/")[-1]
         encoded_orig = quote(orig_url, safe="")
-        proxied = f"{base_proxy_url}/{canonical}/{fname}?remote_url={encoded_orig}&mode={mode}&environment={environment}"
+        proxied = (
+            f"{base_proxy_url}/{canonical}/{fname}?"
+            f"remote_url={encoded_orig}&mode={mode}&environment={environment}"
+        )
         return f'href="{proxied}"'
 
     rewritten_html = re.sub(r'href=["\'](https?://[^"\']+)["\']', _rewrite_link, html_text)
