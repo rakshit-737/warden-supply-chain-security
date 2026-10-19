@@ -48,6 +48,7 @@ from app.api.routers import (
     packages,
     policies,
     projects,
+    proxy,
     scans,
     system,
     users,
@@ -249,7 +250,7 @@ def create_app() -> FastAPI:
     p = settings.API_V1_PREFIX
     for module in (
         health, auth, users, scans, packages, diffs, projects, vulnerabilities,
-        policies, events, audit, monitoring, containers, system, ml,
+        policies, events, audit, monitoring, containers, system, ml, proxy,
     ):
         app.include_router(module.router, prefix=p)
 
