@@ -128,6 +128,86 @@ def _run(deps: list[Dep], args) -> int:
     return 0
 
 
+def cmd_run(args) -> int:
+    import subprocess
+    cmd_args = args.command_args
+    if not cmd_args:
+        print("error: run requires a command, e.g. 'warden run pip install requests'", file=sys.stderr)
+        return 3
+
+    pkg_mgr = cmd_args[0]
+    packages_to_check: list[str] = []
+
+    if pkg_mgr in ("pip", "pip3") and len(cmd_args) >= 2 and cmd_args[1] == "install":
+        for arg in cmd_args[2:]:
+            if not arg.startswith("-") and not arg.startswith("."):
+                packages_to_check.append(arg)
+    elif pkg_mgr in ("npm", "yarn", "pnpm") and len(cmd_args) >= 2 and cmd_args[1] in ("install", "i", "add"):
+        for arg in cmd_args[2:]:
+            if not arg.startswith("-") and not arg.startswith("."):
+                packages_to_check.append(arg)
+
+    if not packages_to_check:
+        return subprocess.call(cmd_args)
+
+    color_prefix = "" if args.no_color else "\033[94m"
+    color_reset = "" if args.no_color else "\033[0m"
+    print(f"{color_prefix}[warden firewall]{color_reset} Intercepting install for: {', '.join(packages_to_check)}")
+    deps = [_dep_from_spec(pkg) for pkg in packages_to_check]
+
+    has_api = bool(getattr(args, "token", "") and getattr(args, "api", ""))
+    if has_api:
+        gate_res = _run(deps, args)
+        if gate_res != 0 and not getattr(args, "force", False):
+            err_color = "" if args.no_color else "\033[91m"
+            print(f"{err_color}[warden firewall] Install aborted due to security policy violations.{color_reset}", file=sys.stderr)
+            return 2
+    else:
+        print("[warden firewall] Passing through to package manager (run with --api/--token for active gating).")
+
+    return subprocess.call(cmd_args)
+
+
+def cmd_reachability(args) -> int:
+    try:
+        from app.analysis.reachability import VulnerableSymbol, assess_reachability
+    except ImportError:
+        print("error: reachability requires server packages installed", file=sys.stderr)
+        return 3
+
+    target = VulnerableSymbol(
+        package_name=args.package,
+        advisory_id=args.advisory or "ADVISORY",
+        symbol_name=args.symbol,
+    )
+    findings = assess_reachability(args.path, [target])
+    if not findings:
+        print("No reachability findings generated.")
+        return 0
+
+    for f in findings:
+        status_val = f.status.value
+        status_color = ""
+        if not args.no_color:
+            status_color = "\033[92m" if status_val == "transitive_dormant" else ("\033[91m" if status_val == "reachable" else "\033[93m")
+        reset = "" if args.no_color else "\033[0m"
+
+        print(f"Advisory:  {f.advisory_id}")
+        print(f"Package:   {f.package_name}")
+        print(f"Status:    {status_color}{status_val.upper()}{reset} (confidence: {f.confidence})")
+        print(f"Details:   {f.explanation}")
+        if f.call_sites:
+            print("Call sites in project code:")
+            for cs in f.call_sites:
+                print(f"  • {cs['file']}:{cs['line']} -> {cs['call']}()")
+        if f.import_sites:
+            print("Import sites in project code:")
+            for imp in f.import_sites:
+                print(f"  • {imp['file']}:{imp['line']} ({imp['statement']})")
+        print("-" * 50)
+    return 0
+
+
 API_COMMANDS = frozenset({"scan", "gate"})
 
 
@@ -156,6 +236,18 @@ def build_parser() -> argparse.ArgumentParser:
     gp = sub.add_parser("gate", help="Scan a requirements file through the API and gate CI", parents=[api_options])
     gp.add_argument("-r", "--requirements", help="Path to requirements.txt")
     gp.set_defaults(func=cmd_gate)
+
+    run_p = sub.add_parser("run", help="Wrap pip/npm to scan dependencies before installing", parents=[api_options])
+    run_p.add_argument("--force", action="store_true", help="install even if policy warns or blocks")
+    run_p.add_argument("command_args", nargs=argparse.REMAINDER, help="the package install command, e.g. pip install requests")
+    run_p.set_defaults(func=cmd_run)
+
+    reach_p = sub.add_parser("reachability", help="Assess whether vulnerable symbols are reachable in project AST")
+    reach_p.add_argument("path", nargs="?", default=".", help="Project source path")
+    reach_p.add_argument("--package", "-p", required=True, help="Target package name")
+    reach_p.add_argument("--advisory", "-a", help="Advisory or CVE ID")
+    reach_p.add_argument("--symbol", "-s", help="Vulnerable function, method or class name")
+    reach_p.set_defaults(func=cmd_reachability)
 
     from cli import local
 

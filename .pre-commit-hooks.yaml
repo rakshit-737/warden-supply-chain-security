@@ -1,0 +1,18 @@
+- id: warden-project-scan
+  name: Warden Supply-Chain Firewall Scan
+  description: Statically scans dependency manifests for supply-chain hygiene, typosquatting and dependency confusion.
+  entry: python -m cli.warden_cli project scan
+  language: python
+  files: '(requirements.*\.txt|pyproject\.toml|poetry\.lock|Pipfile\.lock|package\.json|package-lock\.json|Dockerfile|docker-compose\.ya?ml)$'
+  pass_filenames: false
+  stages: [pre-commit]
+  additional_dependencies: []
+
+- id: warden-policy-validate
+  name: Warden Policy Validation
+  description: Validates Warden policy-as-code documents against schema rules.
+  entry: python -m cli.warden_cli policy validate
+  language: python
+  files: 'policies/.*\.ya?ml$'
+  types: [yaml]
+  stages: [pre-commit]
