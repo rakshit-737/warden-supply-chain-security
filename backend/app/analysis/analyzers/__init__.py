@@ -28,6 +28,8 @@ from app.analysis.analyzers.install_vectors import InstallVectorsAnalyzer
 from app.analysis.analyzers.inventory import InventoryAnalyzer
 from app.analysis.analyzers.ioc import IOCAnalyzer
 from app.analysis.analyzers.metadata import MetadataAnalyzer
+from app.analysis.analyzers.npm_scripts import NpmScriptsAnalyzer
+from app.analysis.analyzers.npm_typosquat import NpmTyposquatAnalyzer
 from app.analysis.analyzers.obfuscation import ObfuscationAnalyzer
 from app.analysis.analyzers.provenance import ProvenanceAnalyzer
 from app.analysis.analyzers.secrets import SecretsAnalyzer
@@ -56,6 +58,9 @@ ALL_ANALYZERS: list[Analyzer] = [
     SecretsAnalyzer(),
     DependencyConfusionAnalyzer(),
     ProvenanceAnalyzer(),
+    # npm ecosystem analyzers
+    NpmScriptsAnalyzer(),
+    NpmTyposquatAnalyzer(),
     # Optional external-tool layers: they report themselves unavailable (and the orchestrator
     # records TOOL_UNAVAILABLE) when the tool is not installed, rather than silently finding nothing.
     YaraScanAnalyzer(),

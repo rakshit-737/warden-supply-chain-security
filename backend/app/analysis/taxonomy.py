@@ -416,6 +416,23 @@ _r("CONTAINER_MISCONFIG", C.MISCONFIGURATION, D.CONTAINER, "Container misconfigu
    "Apply the recommended hardening for the reported configuration issue.",
    owasp=("A05:2021",), ssdf=("PW.9",))
 
+# --- npm ecosystem -------------------------------------------------------------------------------------------------
+_r("NPM_INSTALL_SCRIPT", C.INSTALL_TIME, D.BEHAVIORAL, "Active lifecycle script in package.json",
+   "Review package.json preinstall/install/postinstall scripts; untrusted packages execute code during npm install.",
+   cwe=("CWE-506",), attack=("T1059.004",), ssdf=("PW.4",), primary=True)
+_r("NPM_CURL_PIPE_SHELL", C.MALICIOUS_BEHAVIOR, D.BEHAVIORAL, "Remote script piped to shell in npm lifecycle",
+   "Never pipe remote content into bash/sh in package lifecycle scripts; download and verify pinned checksums.",
+   cwe=("CWE-494",), attack=("T1105", "T1059.004"), primary=True)
+_r("NPM_ENV_HARVEST", C.CREDENTIAL_ACCESS, D.BEHAVIORAL, "Environment or token harvest in npm lifecycle",
+   "npm lifecycle script accesses sensitive environment variables (keys, secrets, home directory).",
+   cwe=("CWE-526", "CWE-200"), attack=("T1552",), primary=True)
+_r("NPM_SUSPICIOUS_SCRIPT", C.OBFUSCATION, D.BEHAVIORAL, "Obfuscated or suspicious script in package.json",
+   "Decode and inspect the payload before installing; script uses hex, base64 or eval.",
+   cwe=("CWE-1027",), attack=("T1027",), primary=True)
+_r("NPM_TYPOSQUAT", C.TYPOSQUAT, D.REPUTATION, "Name closely imitates a popular npm package",
+   "Verify the package name against the intended library; npm typosquats imitate popular packages to deliver malware.",
+   cwe=("CWE-1357",), attack=("T1195.001",), primary=True)
+
 # --- pipeline / fail-safe -----------------------------------------------------------------------------
 _r("FETCH_FAILED", C.PIPELINE, D.PIPELINE, "Artifact could not be analysed",
    "Analysis was incomplete; do not treat the verdict as clean. Retry or review manually.")
