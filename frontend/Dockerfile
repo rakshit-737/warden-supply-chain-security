@@ -22,7 +22,7 @@ COPY . .
 RUN npm run build
 
 # ---- Stage 2: serve with unprivileged nginx --------------------------------------------------
-FROM nginxinc/nginx-unprivileged:1.30.5-alpine3.24@sha256:ed04ec1ff34502c339ee5c3ae3f855442398edc1d05591e2b98981dcbbd20b1e AS runtime
+FROM nginxinc/nginx-unprivileged:1.30.5-alpine3.24@sha256:56b8272e43a0525f67aed68d1e0794a712d10e3e45a563e118e9a77c817e6f86 AS runtime
 
 LABEL org.opencontainers.image.title="warden-web" \
       org.opencontainers.image.description="Warden security dashboard (static SPA and API reverse proxy)" \
