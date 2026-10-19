@@ -16,12 +16,12 @@ Endpoints:
 
 from __future__ import annotations
 
+import json
 import re
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlsplit
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse
 from packaging.utils import canonicalize_name, parse_sdist_filename, parse_wheel_filename
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -144,7 +144,7 @@ def pypi_simple_project(
                             f"?remote_url={encoded_orig}&mode={mode}&environment={environment}"
                         )
                 return Response(
-                    content=httpx._content.json_dumps(data),
+                    content=json.dumps(data).encode("utf-8"),
                     media_type="application/vnd.pypi.simple.v1+json",
                     headers={"X-Warden-Firewall": "active"},
                 )
@@ -194,6 +194,22 @@ def pypi_download_package(
     file_name, version = _parse_pkg_filename(filename)
 
     unquoted_remote = unquote(remote_url)
+    parsed = urlsplit(unquoted_remote)
+
+    # Strictly validate upstream URL to eliminate SSRF
+    allowed_artifact_hosts = set(settings.ARTIFACT_HOST_ALLOWLIST) | {"files.pythonhosted.org"}
+    if parsed.scheme != "https":
+        raise HTTPException(status_code=400, detail="Only HTTPS upstream artifact URLs are allowed")
+
+    host = (parsed.hostname or "").lower()
+    if not host or host not in allowed_artifact_hosts:
+        raise HTTPException(status_code=403, detail="Artifact host is not permitted by proxy policy")
+
+    clean_path = parsed.path
+    if not clean_path.startswith("/packages/") or not clean_path.endswith(f"/{filename}"):
+        raise HTTPException(status_code=400, detail="Invalid PyPI artifact path format")
+
+    target_url = f"https://{host}{clean_path}"
 
     decision_value = "allow"
     risk_score = 0
@@ -272,17 +288,26 @@ def pypi_download_package(
             },
         )
 
-    # Safe streaming of artifact from PyPI
-    stream_client = httpx.Client(follow_redirects=True, timeout=60.0)
+    # Safe retrieval of artifact from PyPI via SafeHttpClient with strict host and size bounds
+    client = SafeHttpClient(
+        name="proxy.artifact",
+        allowed_hosts=frozenset(allowed_artifact_hosts),
+        max_response_bytes=settings.MAX_DOWNLOAD_BYTES,
+        timeout=60.0,
+    )
+    try:
+        upstream_res = client.request("GET", target_url)
+    except Exception as exc:
+        log.warning("proxy_upstream_download_failed", error=str(exc), package=canonical)
+        raise HTTPException(status_code=502, detail="Failed to fetch package from upstream") from exc
+    finally:
+        client.close()
 
-    def _stream_generator():
-        try:
-            with stream_client.stream("GET", unquoted_remote) as resp:
-                resp.raise_for_status()
-                for chunk in resp.iter_bytes(chunk_size=65536):
-                    yield chunk
-        finally:
-            stream_client.close()
+    if upstream_res.status != 200:
+        raise HTTPException(
+            status_code=upstream_res.status,
+            detail=f"Upstream returned HTTP {upstream_res.status}",
+        )
 
     resp_headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',
@@ -293,8 +318,8 @@ def pypi_download_package(
     if is_blocked:
         resp_headers["X-Warden-Notice"] = "Package flagged as high risk (allowed under audit mode)"
 
-    return StreamingResponse(
-        _stream_generator(),
+    return Response(
+        content=upstream_res.content,
         media_type="application/octet-stream",
         headers=resp_headers,
     )
