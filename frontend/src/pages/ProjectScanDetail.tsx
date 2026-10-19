@@ -7,6 +7,7 @@ import { PERMISSIONS } from "../auth/permissions";
 import { Card } from "../components/Card";
 import { DataTable, type Column } from "../components/DataTable";
 import { DecisionBadge } from "../components/DecisionBadge";
+import { DependencyGraph } from "../components/DependencyGraph";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { FindingCard } from "../components/FindingCard";
@@ -86,35 +87,106 @@ function ComponentsTab({ projectId, scanId }: { projectId: string; scanId: strin
 
 function GraphTab({ projectId, scanId }: { projectId: string; scanId: string }) {
   const query = useApiQuery(`project-graph:${scanId}`, (signal) => getProjectScanGraph(projectId, scanId, { signal }));
+  const [viewMode, setViewMode] = useState<"graph" | "table">("graph");
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+
   if (query.error) return <ErrorState error={query.error} onRetry={query.reload} />;
   if (!query.data) return <LoadingBlock label="Loading dependency graph" />;
+
   const { metrics, nodes } = query.data;
   const packages = nodes.filter((n) => n.type === "package");
+
   return (
     <div className="flex flex-col gap-4">
-      <Card title="Graph metrics">
-        <KeyValueList
-          columns={2}
-          items={[
-            { term: "Packages", value: packages.length },
-            { term: "Edges", value: metrics.edge_count },
-            { term: "Maximum depth", value: metrics.max_depth },
-            { term: "Direct / transitive", value: `${metrics.direct_count ?? "—"} / ${metrics.transitive_count ?? "—"}` },
-            { term: "Cycles", value: Boolean(metrics.has_cycles) },
-            { term: "Single points of failure", value: (metrics.single_points ?? []).length },
-          ]}
-        />
-      </Card>
-      <DataTable
-        caption="Packages by blast radius"
-        showCaption
-        columns={NODE_COLUMNS}
-        rows={packages}
-        rowKey={(n) => n.id}
-        defaultSort={{ columnId: "blast", direction: "desc" }}
-        empty={<EmptyState title="The graph has no package nodes." compact />}
-        footnote="Blast radius: share of the project's packages that depend on this one, directly or transitively."
-      />
+      {/* View Switcher & Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1 bg-sunken p-1 rounded-lg border border-line">
+          <button
+            onClick={() => setViewMode("graph")}
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+              viewMode === "graph" ? "bg-panel text-ink shadow-sm border border-lineStrong" : "text-inkSecondary hover:text-ink"
+            }`}
+          >
+            Interactive Graph
+          </button>
+          <button
+            onClick={() => setViewMode("table")}
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+              viewMode === "table" ? "bg-panel text-ink shadow-sm border border-lineStrong" : "text-inkSecondary hover:text-ink"
+            }`}
+          >
+            Blast Radius Table
+          </button>
+        </div>
+        <div className="text-xs text-inkMuted">
+          {packages.length} packages · {metrics.edge_count} edges · max depth {metrics.max_depth}
+        </div>
+      </div>
+
+      {viewMode === "graph" ? (
+        <div className="flex flex-col gap-4">
+          <DependencyGraph data={query.data} onSelectNode={setSelectedNode} height={540} />
+
+          {selectedNode && (
+            <Card title={`Selected: ${selectedNode.name}`} description="Package details from dependency graph analysis">
+              <KeyValueList
+                columns={2}
+                items={[
+                  { term: "Type", value: selectedNode.type },
+                  { term: "Version", value: selectedNode.version ?? "—" },
+                  { term: "Depth", value: selectedNode.depth ?? "—" },
+                  { term: "Direct dependency", value: selectedNode.direct ? "Yes" : "No" },
+                  { term: "Blast radius", value: selectedNode.blast_radius !== null ? formatPercent(selectedNode.blast_radius) : "—" },
+                  { term: "Transitive dependents", value: selectedNode.transitive_dependents },
+                  { term: "Risk score", value: selectedNode.risk ?? "—" },
+                  { term: "Decision", value: selectedNode.decision ? <DecisionBadge value={selectedNode.decision} /> : "—" },
+                  { term: "Single point of failure", value: selectedNode.is_single_point ? `Yes (${selectedNode.dominated} dominated)` : "No" },
+                ]}
+              />
+            </Card>
+          )}
+
+          <Card title="Graph Structure Metrics">
+            <KeyValueList
+              columns={2}
+              items={[
+                { term: "Packages", value: packages.length },
+                { term: "Edges", value: metrics.edge_count },
+                { term: "Maximum depth", value: metrics.max_depth },
+                { term: "Direct / transitive", value: `${metrics.direct_count ?? "—"} / ${metrics.transitive_count ?? "—"}` },
+                { term: "Cycles detected", value: Boolean(metrics.has_cycles) },
+                { term: "Single points of failure", value: (metrics.single_points ?? []).length },
+              ]}
+            />
+          </Card>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <Card title="Graph metrics">
+            <KeyValueList
+              columns={2}
+              items={[
+                { term: "Packages", value: packages.length },
+                { term: "Edges", value: metrics.edge_count },
+                { term: "Maximum depth", value: metrics.max_depth },
+                { term: "Direct / transitive", value: `${metrics.direct_count ?? "—"} / ${metrics.transitive_count ?? "—"}` },
+                { term: "Cycles", value: Boolean(metrics.has_cycles) },
+                { term: "Single points of failure", value: (metrics.single_points ?? []).length },
+              ]}
+            />
+          </Card>
+          <DataTable
+            caption="Packages by blast radius"
+            showCaption
+            columns={NODE_COLUMNS}
+            rows={packages}
+            rowKey={(n) => n.id}
+            defaultSort={{ columnId: "blast", direction: "desc" }}
+            empty={<EmptyState title="The graph has no package nodes." compact />}
+            footnote="Blast radius: share of the project's packages that depend on this one, directly or transitively."
+          />
+        </div>
+      )}
     </div>
   );
 }
