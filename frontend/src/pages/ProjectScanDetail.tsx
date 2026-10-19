@@ -87,7 +87,7 @@ function ComponentsTab({ projectId, scanId }: { projectId: string; scanId: strin
 
 function GraphTab({ projectId, scanId }: { projectId: string; scanId: string }) {
   const query = useApiQuery(`project-graph:${scanId}`, (signal) => getProjectScanGraph(projectId, scanId, { signal }));
-  const [viewMode, setViewMode] = useState<"graph" | "table">("graph");
+  const [viewMode, setViewMode] = useState<"both" | "graph" | "table">("both");
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 
   if (query.error) return <ErrorState error={query.error} onRetry={query.reload} />;
@@ -102,12 +102,20 @@ function GraphTab({ projectId, scanId }: { projectId: string; scanId: string }) 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 bg-sunken p-1 rounded-lg border border-line">
           <button
+            onClick={() => setViewMode("both")}
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+              viewMode === "both" ? "bg-panel text-ink shadow-sm border border-lineStrong" : "text-inkSecondary hover:text-ink"
+            }`}
+          >
+            Graph & Table
+          </button>
+          <button
             onClick={() => setViewMode("graph")}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
               viewMode === "graph" ? "bg-panel text-ink shadow-sm border border-lineStrong" : "text-inkSecondary hover:text-ink"
             }`}
           >
-            Interactive Graph
+            Graph Only
           </button>
           <button
             onClick={() => setViewMode("table")}
@@ -115,7 +123,7 @@ function GraphTab({ projectId, scanId }: { projectId: string; scanId: string }) 
               viewMode === "table" ? "bg-panel text-ink shadow-sm border border-lineStrong" : "text-inkSecondary hover:text-ink"
             }`}
           >
-            Blast Radius Table
+            Table Only
           </button>
         </div>
         <div className="text-xs text-inkMuted">
@@ -123,7 +131,7 @@ function GraphTab({ projectId, scanId }: { projectId: string; scanId: string }) 
         </div>
       </div>
 
-      {viewMode === "graph" ? (
+      {(viewMode === "both" || viewMode === "graph") && (
         <div className="flex flex-col gap-4">
           <DependencyGraph data={query.data} onSelectNode={setSelectedNode} height={540} />
 
@@ -145,22 +153,10 @@ function GraphTab({ projectId, scanId }: { projectId: string; scanId: string }) 
               />
             </Card>
           )}
-
-          <Card title="Graph Structure Metrics">
-            <KeyValueList
-              columns={2}
-              items={[
-                { term: "Packages", value: packages.length },
-                { term: "Edges", value: metrics.edge_count },
-                { term: "Maximum depth", value: metrics.max_depth },
-                { term: "Direct / transitive", value: `${metrics.direct_count ?? "—"} / ${metrics.transitive_count ?? "—"}` },
-                { term: "Cycles detected", value: Boolean(metrics.has_cycles) },
-                { term: "Single points of failure", value: (metrics.single_points ?? []).length },
-              ]}
-            />
-          </Card>
         </div>
-      ) : (
+      )}
+
+      {(viewMode === "both" || viewMode === "table") && (
         <div className="flex flex-col gap-4">
           <Card title="Graph metrics">
             <KeyValueList
