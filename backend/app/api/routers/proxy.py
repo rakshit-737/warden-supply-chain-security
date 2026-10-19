@@ -16,9 +16,10 @@ Endpoints:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import re
-from urllib.parse import quote, unquote, urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
@@ -41,29 +42,30 @@ log = get_logger("warden.proxy")
 router = APIRouter(prefix="/proxy/pypi", tags=["proxy"])
 _orchestrator = Orchestrator()
 
-# Safe regex for extracting (name, version) from filename if packaging utils cannot parse
-_FALLBACK_FILE_RE = re.compile(
-    r"^([A-Za-z0-9_.-]+?)-([0-9][A-Za-z0-9.+!_*-]*)(?:\.tar\.gz|\.zip|-.*\.whl)$",
-    re.IGNORECASE,
-)
-
 
 def _parse_pkg_filename(filename: str) -> tuple[str, str | None]:
     """Extract canonical package name and version from wheel or sdist filename."""
+    if len(filename) > 255:
+        filename = filename[:255]
     try:
         if filename.endswith(".whl"):
             name, ver, _, _ = parse_wheel_filename(filename)
             return canonicalize_name(name), str(ver)
         if filename.endswith((".tar.gz", ".zip", ".tar.bz2")):
             name, ver = parse_sdist_filename(filename)
-            return canonicalize_name(name), str(ver)
-    except Exception:  # nosec B110 - fall back to regex on unparseable wheel/sdist name
+    # Fall back to string parsing on unparseable wheel/sdist name
+    except Exception:  # nosec B110
         pass
 
-    m = _FALLBACK_FILE_RE.match(filename)
-    if m:
-        return canonicalize_name(m.group(1)), m.group(2)
-    return canonicalize_name(filename.split("-")[0]), None
+    base = filename
+    for ext in (".tar.gz", ".tar.bz2", ".zip", ".whl"):
+        if base.endswith(ext):
+            base = base[:-len(ext)]
+            break
+    parts = base.split("-")
+    if len(parts) >= 2:
+        return canonicalize_name(parts[0]), parts[1]
+    return canonicalize_name(parts[0]), None
 
 
 def _get_active_policy(db: Session, environment: str = DEFAULT_ENVIRONMENT) -> Policy | None:
@@ -135,34 +137,28 @@ def pypi_simple_project(
             data = res.json()
             if isinstance(data, dict) and "files" in data:
                 for file_entry in data["files"]:
-                    orig_url = file_entry.get("url", "")
                     filename = file_entry.get("filename", "")
-                    if orig_url and filename:
-                        encoded_orig = quote(orig_url, safe="")
+                    if filename:
                         file_entry["url"] = (
                             f"{base_proxy_url}/{canonical}/{filename}"
-                            f"?remote_url={encoded_orig}&mode={mode}&environment={environment}"
+                            f"?mode={mode}&environment={environment}"
                         )
                 return Response(
                     content=json.dumps(data).encode("utf-8"),
                     media_type="application/vnd.pypi.simple.v1+json",
                     headers={"X-Warden-Firewall": "active"},
                 )
-        except Exception:  # nosec B110 - fallback to HTML handling if JSON fails
-            pass  # Fallback to HTML handling
+        # Fallback to HTML handling if JSON fails
+        except Exception:  # nosec B110
+            pass
 
     # HTML parsing & link rewriting
     html_text = res.text
-    # Rewrite href="https://files.pythonhosted.org/packages/.../filename.whl#sha256=..."
+
     def _rewrite_link(match: re.Match) -> str:
         orig_url = match.group(1)
-        # Extract filename from url
         fname = orig_url.split("#")[0].split("/")[-1]
-        encoded_orig = quote(orig_url, safe="")
-        proxied = (
-            f"{base_proxy_url}/{canonical}/{fname}?"
-            f"remote_url={encoded_orig}&mode={mode}&environment={environment}"
-        )
+        proxied = f"{base_proxy_url}/{canonical}/{fname}?mode={mode}&environment={environment}"
         return f'href="{proxied}"'
 
     rewritten_html = re.sub(r'href=["\'](https?://[^"\']+)["\']', _rewrite_link, html_text)
@@ -179,7 +175,6 @@ def pypi_download_package(
     project: str,
     filename: str,
     request: Request,
-    remote_url: str = Query(..., description="Upstream download URL from PyPI"),
     mode: str = Query("audit", description="Enforce (block downloads) or audit (warn but allow)"),
     environment: str = Query(DEFAULT_ENVIRONMENT, description="Target environment policy"),
     db: Session = Depends(get_db),
@@ -193,23 +188,65 @@ def pypi_download_package(
     canonical = canonicalize_name(clean_name)
     file_name, version = _parse_pkg_filename(filename)
 
-    unquoted_remote = unquote(remote_url)
-    parsed = urlsplit(unquoted_remote)
+    # Query official PyPI registry JSON to resolve the verified artifact download URL
+    meta_client = SafeHttpClient(
+        name="proxy.metadata",
+        allowed_hosts=settings.REGISTRY_HOST_ALLOWLIST,
+        max_response_bytes=settings.MAX_METADATA_BYTES,
+        timeout=15.0,
+    )
+    meta_url = f"{settings.PYPI_JSON_BASE.rstrip('/')}/{canonical}/json"
+    try:
+        meta_res = meta_client.request("GET", meta_url)
+    except Exception as exc:
+        log.warning("proxy_metadata_fetch_failed", package=canonical, error=str(exc))
+        raise HTTPException(status_code=502, detail=f"Failed to query PyPI metadata for {canonical}") from exc
+    finally:
+        meta_client.close()
 
-    # Strictly validate upstream URL to eliminate SSRF
-    allowed_artifact_hosts = set(settings.ARTIFACT_HOST_ALLOWLIST) | {"files.pythonhosted.org"}
-    if parsed.scheme != "https":
-        raise HTTPException(status_code=400, detail="Only HTTPS upstream artifact URLs are allowed")
+    if meta_res.status == 404:
+        raise HTTPException(status_code=404, detail=f"Package '{canonical}' not found on PyPI")
+    if meta_res.status != 200:
+        raise HTTPException(status_code=meta_res.status, detail=f"PyPI returned HTTP {meta_res.status}")
 
-    host = (parsed.hostname or "").lower()
-    if not host or host not in allowed_artifact_hosts:
-        raise HTTPException(status_code=403, detail="Artifact host is not permitted by proxy policy")
+    meta_data = meta_res.json()
+    upstream_file_url: str | None = None
+    expected_sha256: str | None = None
 
-    clean_path = parsed.path
-    if not clean_path.startswith("/packages/") or not clean_path.endswith(f"/{filename}"):
-        raise HTTPException(status_code=400, detail="Invalid PyPI artifact path format")
+    releases = meta_data.get("releases", {})
+    if isinstance(releases, dict):
+        candidates: list[dict] = []
+        if version and version in releases and isinstance(releases[version], list):
+            candidates = [f for f in releases[version] if isinstance(f, dict)]
+        else:
+            candidates = [
+                f for files in releases.values() if isinstance(files, list) for f in files if isinstance(f, dict)
+            ]
 
-    target_url = f"https://{host}{clean_path}"
+        for item in candidates:
+            if item.get("filename") == filename:
+                upstream_file_url = item.get("url")
+                digests = item.get("digests", {})
+                if isinstance(digests, dict):
+                    expected_sha256 = digests.get("sha256")
+                break
+
+    if not upstream_file_url:
+        top_urls = meta_data.get("urls", [])
+        if isinstance(top_urls, list):
+            for item in top_urls:
+                if isinstance(item, dict) and item.get("filename") == filename:
+                    upstream_file_url = item.get("url")
+                    digests = item.get("digests", {})
+                    if isinstance(digests, dict):
+                        expected_sha256 = digests.get("sha256")
+                    break
+
+    if not upstream_file_url:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Artifact '{filename}' not found for package '{canonical}' on PyPI",
+        )
 
     decision_value = "allow"
     risk_score = 0
@@ -289,25 +326,32 @@ def pypi_download_package(
         )
 
     # Safe retrieval of artifact from PyPI via SafeHttpClient with strict host and size bounds
-    client = SafeHttpClient(
+    allowed_artifact_hosts = frozenset(settings.ARTIFACT_HOST_ALLOWLIST) | {"files.pythonhosted.org"}
+    download_client = SafeHttpClient(
         name="proxy.artifact",
-        allowed_hosts=frozenset(allowed_artifact_hosts),
+        allowed_hosts=allowed_artifact_hosts,
         max_response_bytes=settings.MAX_DOWNLOAD_BYTES,
         timeout=60.0,
     )
     try:
-        upstream_res = client.request("GET", target_url)
+        upstream_res = download_client.request("GET", upstream_file_url)
     except Exception as exc:
         log.warning("proxy_upstream_download_failed", error=str(exc), package=canonical)
         raise HTTPException(status_code=502, detail="Failed to fetch package from upstream") from exc
     finally:
-        client.close()
+        download_client.close()
 
     if upstream_res.status != 200:
         raise HTTPException(
             status_code=upstream_res.status,
             detail=f"Upstream returned HTTP {upstream_res.status}",
         )
+
+    if expected_sha256:
+        content_sha = hashlib.sha256(upstream_res.content).hexdigest()
+        if not hmac.compare_digest(content_sha, expected_sha256.lower()):
+            log.warning("proxy_checksum_mismatch", package=canonical, filename=filename)
+            raise HTTPException(status_code=502, detail="Upstream artifact integrity check failed")
 
     resp_headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',
