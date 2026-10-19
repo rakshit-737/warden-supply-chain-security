@@ -164,7 +164,7 @@ footer a { color: var(--muted); }
       <div class="steps">
         <div class="step"><h3><span>01</span>Acquire</h3><p>PyPI metadata and the real sdist / wheel, hash-verified. npm manifests and lockfiles are inventoried for SBOMs.</p></div>
         <div class="step"><h3><span>02</span>Extract safely</h3><p>Path traversal, zip bombs, symlinks and oversized members are rejected. Nothing is imported or run.</p></div>
-        <div class="step"><h3><span>03</span>Analyze</h3><p>14 analyzers: AST behaviour, install hooks, obfuscation, typosquats, provenance, secrets, YARA, Semgrep, OSV / KEV / EPSS.</p></div>
+        <div class="step"><h3><span>03</span>Analyze</h3><p>16 analyzers: AST behaviour, install hooks, npm lifecycle scripts &amp; typosquats, obfuscation, provenance, secrets, YARA, Semgrep, OSV / KEV / EPSS.</p></div>
         <div class="step"><h3><span>04</span>Correlate</h3><p>Findings chain into named attacks — credential theft then exfiltration, install-time droppers — each mapped to MITRE ATT&amp;CK.</p></div>
         <div class="step"><h3><span>05</span>Score</h3><p>Behavioural, vulnerability, provenance, integrity and more, kept separate. ML may sharpen a verdict but cannot invent one.</p></div>
         <div class="step"><h3><span>06</span>Decide</h3><p>Policy as code sets thresholds and deny rules per environment. Known malware and hash mismatches are non-overridable.</p></div>
@@ -175,14 +175,16 @@ footer a { color: var(--muted); }
   <section>
     <div class="wrap">
       <h2>What's in the box</h2>
-      <p class="sub">Use the pieces you need: a CLI that works without a server, a GitHub Action for CI, or the full platform with a security console.</p>
+      <p class="sub">Use the pieces you need: a CLI that works without a server, an inline PyPI proxy firewall, a GitHub Action for CI, or the full platform with a security console.</p>
       <div class="grid">
-        <div class="card"><h3>CLI</h3><p>Project scans, CycloneDX / SPDX SBOMs, release diffs, container-image scans and policy validation — offline, no server needed.</p></div>
+        <div class="card"><h3>PyPI Proxy Firewall</h3><p>Transparent PEP 503 caching proxy gateway for <code>pip</code> and <code>uv</code>. Scans wheels and sdists before download and blocks malware in real time.</p></div>
+        <div class="card"><h3>Interactive Threat Graph</h3><p>Force-directed Canvas dependency graph with real-time physics, risk heatmaps, blast radius sizing and dependency chain tracing.</p></div>
+        <div class="card"><h3>Reachability Engine</h3><p>AST-based intra-procedural call-graph analysis that cuts CVE noise by verifying if vulnerable symbols are actually invoked.</p></div>
+        <div class="card"><h3>CLI &amp; Pre-commit</h3><p><code>warden run</code> installer gate, offline project scans, CycloneDX / SPDX SBOMs, release diffs, and pre-commit hooks.</p></div>
         <div class="card"><h3>GitHub Action</h3><p>Manifest hygiene and dependency-confusion checks on every PR, uploaded as SARIF to code scanning.</p></div>
-        <div class="card"><h3>API &amp; console</h3><p>FastAPI backend and a React security console: dashboards, scan history, release diffs, policy exceptions with approvals.</p></div>
+        <div class="card"><h3>API &amp; Console</h3><p>FastAPI backend and React security console: dashboard, scan history, threat graph, release diffs, policy exceptions with approvals.</p></div>
         <div class="card"><h3>Monitoring</h3><p>A worker watches your dependencies for new releases and diffs their behaviour against the version you trust.</p></div>
-        <div class="card"><h3>Reports</h3><p>SARIF, Markdown and HTML reports; a hash-chained audit log for every decision.</p></div>
-        <div class="card"><h3>Hardened deploy</h3><p>Docker Compose with digest-pinned images, split networks, read-only filesystems and no default secrets.</p></div>
+        <div class="card"><h3>Reports &amp; Audit</h3><p>SARIF, Markdown and HTML reports; tamper-evident hash-chained audit log for every security-relevant event.</p></div>
       </div>
     </div>
   </section>
@@ -202,8 +204,14 @@ footer a { color: var(--muted); }
 <pre><span class="c"># install from PyPI (or a wheel from the Releases page)</span>
 pip install warden-supply-chain-security
 
+<span class="c"># transparent firewall: scan dependencies before installing</span>
+warden run pip install requests==2.32.3
+
 <span class="c"># scan a project's manifests — nothing is installed or executed</span>
 warden project scan ./my-app
+
+<span class="c"># assess whether vulnerable symbols are called in code</span>
+warden reachability ./src --package requests --symbol Session
 
 <span class="c"># generate an SBOM</span>
 warden sbom generate ./my-app --format cyclonedx -o bom.json

@@ -66,13 +66,14 @@ flowchart LR
     CLI["warden CLI"]
     GHA["GitHub Action<br/>(SARIF upload)"]
     UI["Security console"]
+    PROXY["PEP 503 PyPI Proxy<br/>(pip / uv gateway)"]
   end
   subgraph API["FastAPI backend"]
     direction TB
     subgraph PKG["Package scan"]
       direction TB
       ACQ["Acquisition<br/>PyPI metadata + artifact"] --> EXT["Safe extraction<br/>(hostile archives)"]
-      EXT --> AZ["14 analyzers in parallel"]
+      EXT --> AZ["16 analyzers in parallel"]
       AZ --> COR["Attack-chain correlation"]
       COR --> RISK["Risk engine<br/>(separate dimensions)"]
       RISK --> POL["Policy engine<br/>(policy-as-code)"]
@@ -80,12 +81,14 @@ flowchart LR
     PROJ["Project scans<br/>manifests · SBOM · graph"]
     DIFF["Release diffs"]
     CTR["Container images<br/>(offline + optional Trivy)"]
+    REACH["Reachability engine<br/>(AST call graph)"]
     REP["Reports<br/>SARIF · Markdown · HTML"]
   end
   WORKER["Monitoring worker"]
   CLI --> API
   GHA --> PROJ
   UI --> API
+  PROXY --> PKG
   POL --> V["allow / warn / block"]
   DIFF --> PKG
   WORKER --> DIFF
@@ -108,6 +111,8 @@ guards, and analyses it **without ever executing package code**.
 | `static_code` | AST behaviour: network egress (including raw sockets), process and shell execution, reverse shells, dynamic evaluation (including names assembled from string pieces), credential environment and file access (including serialised environment dumps), with import aliases resolved |
 | `install_script` | the highest-value vector: active code in `setup.py` and `cmdclass` hooks, graded by what the script does (a compiler call is not a network call) |
 | `install_vectors` | the other ways code runs without an import: executable `.pth` start-up hooks, shipped `sitecustomize` / `usercustomize`, in-tree PEP 517 build backends, build requirements from direct URLs, console scripts that shadow `pip`, `python`, `git` and other commands |
+| `npm_scripts` | npm install-time lifecycle scripts (`preinstall`, `install`, `postinstall`, `prepare`): curl/wget piped to shell, process execution, environment and credential exfiltration, obfuscated commands, reverse shells |
+| `npm_typosquat` | npm package typosquats: Levenshtein distance, homoglyphs, scope confusion (`@evil/pkg` vs `pkg`), and combosquats targeting top 200 popular npm packages |
 | `obfuscation` | high-entropy blobs, decode-then-execute chains, layered encodings, hex and compressed payloads, runtime string reconstruction — decoded under strict bounds, never executed |
 | `ioc` | indicators from a bundled snapshot (URLs, addresses, wallet strings, code fingerprints) |
 | `inventory` | prebuilt binaries in a source distribution, nested archives, suspicious file types, wheel contents that diverge from the sdist |
@@ -198,8 +203,21 @@ and an ML over-escalation.
 
 ## What is implemented today
 
-- **Package scanning** end to end: acquisition, safe extraction, 13 analyzers, correlation, risk,
-  policy, persistence, events and audit.
+- **PEP 503 PyPI firewall proxy**: transparent caching proxy gateway (`/api/v1/proxy/pypi/simple/`) that intercepts
+  wheel and sdist downloads on-the-fly, evaluating packages against active policy in `enforce` or `audit` mode before
+  pip or uv can install them.
+- **AST call-graph reachability engine**: static reachability triage that parses project source trees to detect
+  whether a vulnerable symbol is actually imported and invoked in project code, distinguishing `REACHABLE`,
+  `IMPORTED_NOT_CALLED`, and `TRANSITIVE_DORMANT`.
+- **Developer workflow & installer gating**: `warden run` transparently wraps `pip install` or `npm install` to scan
+  dependencies locally before installation proceeds; `.pre-commit-hooks.yaml` and `.pre-commit-config.yaml` provide
+  git pre-commit gating for dependency manifests and policies.
+- **Interactive force-directed threat graph**: Canvas-rendered dependency graph with real-time physics, risk heatmaps,
+  blast-radius node sizing, dragging, zooming, pan, and upstream/downstream dependency chain highlighting.
+- **npm ecosystem security**: lifecycle script inspection (`preinstall`, `install`, `postinstall`, `prepare`),
+  typosquatting detection against top npm packages, and full manifest (`package.json`, `package-lock.json`) SBOM inventory.
+- **Package scanning** end to end: acquisition, safe extraction, 16 analyzers in parallel, attack-chain correlation,
+  risk scoring across separate dimensions, policy evaluation, persistence, events and audit.
 - **Project scanning**: manifests (requirements, `pyproject.toml`, Python lock files, npm `package.json` and
   `package-lock.json`) parsed with line
   provenance, dependency hygiene and dependency-confusion checks, Dockerfile and Compose linting, a
@@ -213,13 +231,13 @@ and an ML over-escalation.
 - **Continuous monitoring**: a worker that checks watched packages for new releases, compares them
   with the approved version and publishes events, with backoff on failures and a heartbeat for the
   container healthcheck.
-- **REST API**: authentication with refresh-token rotation, scans, packages, projects, diffs,
+- **REST API**: authentication with refresh-token rotation, scans, proxy gateway, packages, projects, diffs,
   containers, monitoring, vulnerabilities, policies and policy validation, exceptions workflow,
   events, audit with chain verification, users, system info, ML model and drift, health, Prometheus
   metrics.
 - **Security console** (React + TypeScript): dashboard, scans, packages, projects with components,
-  graph and SBOM export, release diffs, containers, monitoring, policies, events, audit with integrity
-  verification, exceptions workflow, users, system.
+  interactive dependency threat graph and SBOM export, release diffs, containers, monitoring, policies,
+  events, audit with integrity verification, exceptions workflow, users, system.
 - **Reports**: SARIF 2.1.0 (validated against the official schema), Markdown and self-contained HTML.
 - **Vulnerability intelligence**: OSV, CISA KEV, FIRST EPSS, optional NVD, with a spec-exact CVSS
   v3.x calculator.
@@ -234,7 +252,7 @@ and an ML over-escalation.
 - The opt-in dynamic sandbox: designed in [docs/SANDBOX.md](docs/SANDBOX.md), not built, and the
   setting that would switch it on is refused.
 - Transitive dependencies for project scans beyond what lock files record.
-- npm and other ecosystems.
+- Full npm download proxy registry and additional ecosystems (Cargo, Go, Maven).
 - A Marketplace release of the GitHub Action (it works from this repository today).
 
 ## Quick start
@@ -272,6 +290,8 @@ Package verdicts come from the API (`WARDEN_API` / `WARDEN_TOKEN` may replace th
 ```bash
 python -m cli.warden_cli scan requests==2.32.3 --api "$WARDEN_API" --token "$WARDEN_TOKEN"
 python -m cli.warden_cli gate -r requirements.txt --api "$WARDEN_API" --token "$WARDEN_TOKEN" --fail-on block
+python -m cli.warden_cli run pip install requests==2.32.3           # transparent installer gate
+python -m cli.warden_cli reachability . --package requests --symbol Session
 ```
 
 Local commands (run from `backend/`) use the engines in-process, need no server or token, and never
@@ -288,6 +308,20 @@ python -m cli.warden_cli report result.json --format html -o report.html  # from
 ```
 
 `project scan` also lints Dockerfiles and Compose files it finds under the project.
+
+### Pre-commit integration
+
+Add Warden to your `.pre-commit-config.yaml` to scan manifests and validate policies on git commit:
+
+```yaml
+repos:
+  - repo: https://github.com/rakshit-737/warden-supply-chain-security
+    rev: v2.1.0
+    hooks:
+      - id: warden-project-scan
+        args: ['--fail-on', 'high']
+      - id: warden-policy-validate
+```
 
 The SARIF output is validated against the official SARIF 2.1.0 schema in the test suite and can be
 uploaded with `github/codeql-action/upload-sarif`; results point at the manifest file and, when

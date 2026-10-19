@@ -49,6 +49,16 @@ that schema and kept in step with it.
 | GET | `/scans/{scan_id}` | `scan:read` | One verdict with its findings. |
 | GET | `/scans/stats/overview` | `scan:read` | Totals by decision and severity, blocked in the last 30 days, average risk, most frequent finding codes. |
 
+## PEP 503 PyPI proxy firewall
+
+Base path `/api/v1/proxy/pypi/simple`. Makes Warden a transparent inline firewall gateway for `pip` and `uv`.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/proxy/pypi/simple/` | public | PEP 503 simple repository root listing, proxied from PyPI. |
+| GET | `/proxy/pypi/simple/{project}/` | public | HTML / JSON project file listing. Rewrites all wheel/sdist download links to route through Warden's proxy gateway. |
+| GET | `/proxy/pypi/packages/{project}/{filename}` | public | Proxies package artifact download. Verifies cached or on-demand policy verdict: returns HTTP 200 with streamed bytes on `allow`/`warn`, or HTTP 403 Forbidden with `X-Warden-Decision: BLOCK` when policy fails. Supports `X-Warden-Mode: enforce` (default) vs `X-Warden-Mode: audit`. |
+
 ## Policies and exceptions
 
 | Method | Path | Permission | Notes |

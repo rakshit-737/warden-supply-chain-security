@@ -95,13 +95,14 @@ kept.
 
 ### 3.3 Analyzers (`app/analysis/analyzers`)
 
-Fourteen analyzers run concurrently, each with its own timeout, each returning `Finding` objects:
-metadata, typosquat, static code, install script, install vectors (`.pth` start-up hooks, in-tree
-build backends, console scripts shadowing common commands), obfuscation, IOC, inventory, secrets,
-dependency confusion, provenance, YARA, Semgrep, vulnerability. They never execute package code and never
-perform I/O beyond their declared needs; the two intelligence-backed ones are skipped in offline
-scans. An analyzer that crashes or times out produces `ANALYZER_ERROR`, which raises risk rather than
-silently shrinking the evidence, and the result is not cached.
+Sixteen analyzers run concurrently, each with its own timeout, each returning `Finding` objects:
+metadata, typosquat, npm typosquat, static code, install script, npm lifecycle scripts (`preinstall`,
+`postinstall`, `prepare`), install vectors (`.pth` start-up hooks, in-tree build backends, console scripts
+shadowing common commands), obfuscation, IOC, inventory, secrets, dependency confusion, provenance,
+YARA, Semgrep, vulnerability. They never execute package code and never perform I/O beyond their declared
+needs; the intelligence-backed ones are skipped in offline scans. An analyzer that crashes or times out
+produces `ANALYZER_ERROR`, which raises risk rather than silently shrinking the evidence, and the result
+is not cached.
 
 A finding carries severity **and** confidence separately, the file and line where known, CWE and
 ATT&CK mappings, remediation, and the provenance of the observation. Evidence is sanitised on
@@ -155,8 +156,8 @@ intelligence warns instead of silently allowing.
 - **Observability**: Prometheus metrics with bounded labels, structured JSON logs that redact
   secrets, optional OpenTelemetry spans.
 - **Console** (`frontend/`): React and TypeScript. Dashboard, scans and scan detail, new scan,
-  packages, projects (manifest scans, components, dependency graph, SBOM export), release diffs,
-  containers, monitoring, policies, events, audit with chain verification, exceptions workflow,
+  packages, projects (manifest scans, components, interactive force-directed dependency threat graph, SBOM export),
+  release diffs, containers, monitoring, policies, events, audit with chain verification, exceptions workflow,
   users, system.
 - **Monitoring worker** (`app/workers/monitor.py`): claims due watched packages with a lease, checks
   them for new releases, stores release diffs and publishes events; it touches a heartbeat file the
@@ -164,13 +165,22 @@ intelligence warns instead of silently allowing.
 
 ## 5. Supporting engines
 
+**PyPI Proxy Gateway** (`app/api/routers/proxy.py`) implements a PEP 503-compliant inline firewall proxy.
+It intercepts `pip` and `uv` requests at `/api/v1/proxy/pypi/simple/`, serves rewritten download links, and
+verifies cached or on-demand scan verdicts before allowing packages to be downloaded. In `enforce` mode,
+blocked packages receive HTTP 403; in `audit` mode, violations are logged and alerted while allowing downloads.
+
+**Reachability Analysis** (`app/analysis/reachability.py`) performs intra-procedural AST call-graph analysis
+over project source files. It checks whether vulnerable dependency functions, methods or classes are actually
+imported and called in application code, distinguishing `REACHABLE`, `IMPORTED_NOT_CALLED`, and `TRANSITIVE_DORMANT`.
+
 **SBOM** (`app/sbom`) parses requirements files, `pyproject.toml`, `poetry.lock` and `Pipfile.lock`,
 and npm `package.json`, `package-lock.json` and `npm-shrinkwrap.json` (`app/sbom/npm.py`: versions,
 integrity hashes, dev/optional scopes and Node's nested resolution), with exact line provenance and emits CycloneDX 1.6 or SPDX 2.3, validated against the official
 schemas in tests. **Graph** (`app/graph`) turns an inventory into a dependency graph with depth,
-blast radius, dominators and centrality. Both back the project API and the `warden project scan` /
-`sbom generate` commands. npm components appear in SBOMs, the graph and pinning checks; package
-analysis, verdicts and dependency-confusion checks remain PyPI-only.
+blast radius, dominators and centrality, visualized in the console through an interactive force-directed Canvas.
+Both back the project API and the `warden project scan` / `sbom generate` commands. npm components appear in
+SBOMs, the graph, pinning checks, and are scanned for malicious lifecycle scripts and typosquats.
 
 **Release diffs** (`app/analysis/diff.py`) compare two analysed releases: risk and dimensions,
 capabilities, findings by code and file, the file inventory and declared maintainers.
@@ -201,5 +211,6 @@ see [BENCHMARK.md](BENCHMARK.md).
 
 The opt-in dynamic sandbox (design only, see [SANDBOX.md](SANDBOX.md)); transitive dependencies for
 project scans beyond what lock files record (a PyPI-backed resolver exists in `app/sbom/resolver.py`
-but is not wired into the API or CLI); ecosystems other than PyPI; and a Marketplace release of the
-GitHub Action (it is usable from the repository today).
+but is not wired into the API or CLI); full registry proxies for ecosystems other than PyPI (npm manifest
+SBOM parsing, lifecycle script inspection and typosquat detection are implemented); and a Marketplace release
+of the GitHub Action (it is usable from the repository today).

@@ -26,6 +26,41 @@ warden scan requests==2.32.3
 warden gate -r requirements.txt --fail-on warn
 ```
 
+## `warden run COMMAND...`
+
+Transparent installer gate that intercepts `pip install` or `npm install`, runs package scans, and aborts
+installation if policy violations are detected.
+
+```bash
+warden run pip install flask requests==2.32.3
+warden run npm install lodash
+```
+
+| Option | Meaning |
+|---|---|
+| `--force` | Execute the install command even if policy warns or blocks |
+
+## `warden reachability [PATH] --package PKG`
+
+AST-based reachability engine that determines whether a vulnerable symbol from a dependency is actually
+imported and called in the project code. Errs on the side of reporting reachability when uncertain.
+
+```bash
+warden reachability ./src --package requests --symbol Session --advisory CVE-2023-32681
+```
+
+| Option | Meaning |
+|---|---|
+| `PATH` | Project source directory to inspect (default `.`) |
+| `-p, --package NAME` | Target dependency package name (required) |
+| `-s, --symbol NAME` | Vulnerable function, class or method name |
+| `-a, --advisory ID` | Advisory identifier (e.g. CVE or GHSA) |
+
+Output statuses:
+- **`REACHABLE`** — Symbol is explicitly imported and invoked in project code.
+- **`IMPORTED_NOT_CALLED`** — Module is imported, but the vulnerable function/method is not called.
+- **`TRANSITIVE_DORMANT`** — Package is never imported anywhere in the project.
+
 ## `warden project scan [PATH]`
 
 Dependency hygiene (unpinned, unhashed, ambiguous indexes), dependency confusion, Dockerfile and
@@ -106,3 +141,18 @@ steps:
 
 The action runs `project scan`, uploads the SARIF report to code scanning and only then enforces the
 gate, so a failing build still shows its alerts. Outputs: `sarif-file` and `exit-code`.
+
+## Pre-commit integration
+
+Warden includes hooks for the [pre-commit](https://pre-commit.com/) framework. Add Warden to your
+`.pre-commit-config.yaml` to scan manifests and validate policies locally on git commit:
+
+```yaml
+repos:
+  - repo: https://github.com/rakshit-737/warden-supply-chain-security
+    rev: v2.1.0
+    hooks:
+      - id: warden-project-scan
+        args: ['--fail-on', 'high']
+      - id: warden-policy-validate
+```
