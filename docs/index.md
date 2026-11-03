@@ -3,6 +3,11 @@
 **Decide whether a dependency is safe to install — from what its code does, where it came from, and
 what is known about it.**
 
+!!! note "Product overview"
+    The [public product website](https://rakshit-737.github.io/warden-supply-chain-security/) is the
+    concise visual overview. This documentation is the implementation reference: commands, data
+    contracts, architecture, threat model and benchmark methodology.
+
 Warden analyses PyPI packages, project manifests and container images **without running them**. It
 reports what a package does (install hooks, network and process behaviour, obfuscation, credential
 access), where it came from (provenance, maintainers, dependency confusion) and what is known about
@@ -21,6 +26,17 @@ versioned policy.
 | **Check container images** | Analyse a `docker save` archive offline: user, secrets, installed packages, set-uid binaries, and known vulnerabilities through Trivy. |
 | **Watch packages** | The monitoring worker checks new releases and raises events on drift or maintainer changes. |
 | **Investigate** | The security console shows findings with file and line, ATT&CK and CWE mappings, attack chains, the audit trail and security events. |
+
+## Choose a path
+
+| If you want to... | Start here |
+|---|---|
+| Install and run a first local check | [Getting started](getting-started.md) |
+| Add a dependency gate to CI | [CLI reference](cli.md#github-action) |
+| Understand the package pipeline and trust boundary | [Architecture](ARCHITECTURE.md) |
+| Review the measured threat results | [Detection benchmark](BENCHMARK.md) |
+| Integrate the API or inspect response shapes | [API reference](API.md) |
+| Understand known limits and non-goals | [Threat model](THREAT_MODEL.md) |
 
 ## Real-World Threat Evaluation & Assurance
 

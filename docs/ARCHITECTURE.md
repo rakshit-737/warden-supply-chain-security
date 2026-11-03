@@ -59,7 +59,7 @@ flowchart TB
   CACHE -- hit --> OUT
   CACHE -- miss --> ACQ["Acquisition<br/>registry metadata + artifact"]
   ACQ --> EXT["Safe extraction<br/>bounded, hostile-archive guards"]
-  EXT --> AZ["14 analyzers, in parallel<br/>per-analyzer timeout"]
+  EXT --> AZ["16 analyzers, in parallel<br/>per-analyzer timeout"]
   AZ --> COR["Correlation<br/>findings → attack chains"]
   COR --> RISK["Risk engine<br/>dimensions + floors + ML guardrail"]
   RISK --> POL["Policy engine<br/>confidence-gated rules, exceptions"]
