@@ -27,7 +27,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PYTHON_VERSION="3.12"
-EXCLUDE_NEWER="2026-10-03T00:00:00Z"
+EXCLUDE_NEWER="2026-10-20T00:00:00Z"
 UV_ARGS=(
   --universal
   --generate-hashes
