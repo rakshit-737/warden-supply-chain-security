@@ -1,8 +1,8 @@
 <div align="center">
 
-# Warden, A Software Supply-Chain Security Platform
+# Warden: Software Supply-Chain Security
 
-**Decide whether a dependency is safe to install — from what its code does, where it came from, and what is known about it.**
+**Find out whether a dependency is safe to install by looking at what its code does, where it came from, and what is known about it.**
 
 [![Release](https://img.shields.io/github/v/release/rakshit-737/warden-supply-chain-security)](https://github.com/rakshit-737/warden-supply-chain-security/releases)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
@@ -42,23 +42,23 @@ samples, not real PyPI packages.
 
 </details>
 
-## Why this exists
+## Why Warden exists
 
-A single `pip install` runs third-party code with the developer's or the CI runner's privileges.
-Attackers exploit that with malicious publishes, typosquats, dependency confusion, and account
-takeovers of packages that were fine yesterday.
+A single `pip install` gives third-party code the developer's or CI runner's privileges. Attackers
+take advantage of that through malicious releases, typosquats, dependency confusion, and package
+takeovers — sometimes turning a package that was safe yesterday into a serious risk today.
 
-A vulnerability scanner cannot see any of this: there is no CVE for a package nobody has reported
-yet. Warden asks a different question — *what does this package do, and who really published it?* —
-and keeps vulnerability intelligence as a **separate** dimension, because the two risks are not the
-same thing:
+A vulnerability scanner cannot catch all of this; there may not be a CVE for a package nobody has
+reported yet. Warden asks a different question: *what does this package do, and who really
+published it?* It keeps vulnerability intelligence as a **separate** dimension because the two
+risks are not the same thing:
 
 |                          | No known CVE | Known CVE |
 |--------------------------|--------------|-----------|
 | **Behaviourally benign** | ordinary dependency | patch it |
 | **Behaviourally malicious** | what Warden is for | both problems at once |
 
-## What a scan does
+## How a scan works
 
 ```mermaid
 flowchart LR
@@ -178,7 +178,7 @@ package (optionally a version range and specific finding codes), require a justi
 approved by someone other than the requester — enforced server-side. Unknown vulnerability
 intelligence warns rather than silently allowing.
 
-## Measured on real packages
+## How we measure it
 
 Warden's own analyzers were run against established PyPI projects, and the results are part of the
 project rather than a claim: `backend/ml/collect_real_features.py` records the feature vectors into
@@ -191,7 +191,7 @@ detected secret looked malicious. The fix was threefold: classify secrets found 
 path, add measured real-world negatives to training, and stop the model from creating a critical
 verdict the deterministic layer does not support.
 
-## Measured on synthetic and real-world attack benchmarks
+## Synthetic and real-world attack benchmarks
 
 Warden evaluates detection performance across two complementary benchmark suites:
 
@@ -205,7 +205,7 @@ Warden evaluates detection performance across two complementary benchmark suites
 Full methodology, MITRE ATT&CK mappings, and breakdown per technique are documented in
 [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
-## What is implemented today
+## What's included today
 
 - **PEP 503 PyPI firewall proxy**: transparent caching proxy gateway (`/api/v1/proxy/pypi/simple/`) that intercepts
   wheel and sdist downloads on-the-fly, evaluating packages against active policy in `enforce` or `audit` mode before
@@ -251,7 +251,7 @@ Full methodology, MITRE ATT&CK mappings, and breakdown per technique are documen
   `pip-audit` able to fail the build, PostgreSQL migration round-trip, image scanning and SBOM,
   CodeQL, gitleaks and Trivy, signed build provenance on release.
 
-## Not implemented yet (deliberately listed)
+## What's intentionally not included yet
 
 - The opt-in dynamic sandbox: designed in [docs/SANDBOX.md](docs/SANDBOX.md), not built, and the
   setting that would switch it on is refused.
@@ -259,7 +259,7 @@ Full methodology, MITRE ATT&CK mappings, and breakdown per technique are documen
 - Full npm download proxy registry and additional ecosystems (Cargo, Go, Maven).
 - A Marketplace release of the GitHub Action (it works from this repository today).
 
-## Quick start
+## Get started
 
 **Full stack (Docker):**
 
