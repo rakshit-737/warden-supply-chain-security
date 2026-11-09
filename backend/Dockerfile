@@ -5,7 +5,7 @@
 # Supply chain
 # * Base images are pinned by the digest of their multi-arch image index; the tag is kept only for
 #   readability (when a digest is given, it alone selects the image). Digests were resolved from
-#   registry-1.docker.io on 2026-09-15 (see deploy/README.md for the command and how to bump them).
+#   registry-1.docker.io on 2026-11-09 (see deploy/README.md for the command and how to bump them).
 #   python:3.12.14-slim-trixie was the same index as python:3.12-slim on that date.
 # * Python dependencies are installed from requirements.lock.txt with --require-hashes: pip refuses
 #   any artifact whose sha256 is not listed, so a tampered artifact for a pinned version fails the
@@ -18,7 +18,7 @@
 #   bytecode is precompiled so the container works with a read-only root filesystem.
 
 # ---- Stage 1: dependencies + model training --------------------------------------------------
-FROM python:3.12.14-slim-trixie@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea AS builder
+FROM python:3.12.14-slim-trixie@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -50,14 +50,14 @@ RUN PYTHONPATH=/src python -m ml.train --n 6000 --seed 1337 \
 RUN python -m pip uninstall --yes pip
 
 # ---- Stage 2: runtime (no compilers) ---------------------------------------------------------
-FROM python:3.12.14-slim-trixie@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea AS runtime
+FROM python:3.12.14-slim-trixie@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f AS runtime
 
 LABEL org.opencontainers.image.title="warden-api" \
       org.opencontainers.image.description="Warden software supply-chain security API" \
       org.opencontainers.image.source="https://github.com/rakshit-737/warden-supply-chain-security" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.base.name="docker.io/library/python:3.12.14-slim-trixie" \
-      org.opencontainers.image.base.digest="sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea"
+      org.opencontainers.image.base.digest="sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f"
 
 # UVICORN_WORKERS: Prometheus metrics live in a per-process registry (app/core/metrics.py), so with
 #   several workers each scrape would see only one worker's counters. Default 1; scale out with
